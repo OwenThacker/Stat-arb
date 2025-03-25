@@ -1,0 +1,45 @@
+Statistical Arbitrage Trading Strategy
+
+Overview:
+
+This project explores a statistical arbitrage trading strategy by identifying cointegrated asset pairs, applying advanced feature selection, 
+and refining trade signals using machine learning techniques. The methodology integrates clustering, logistic regression, LSTMs, and 
+volatility-based position sizing to optimize trade execution and risk-adjusted returns.
+
+Features & Methodology:
+
+Pairs Selection: Applied DBSCAN and OPTICS clustering to identify cointegrated asset pairs.
+Feature Selection: Conducted multicollinearity testing (VIF) and utilized XGBoost feature importance for optimal input selection.
+Meta-Labelling: Designed a dual-model pipeline where a logistic classifier generates initial trade signals, which are then meta-labelled and 
+refined by an LSTM model.
+Trade Calibration: Implemented Platt scaling to calibrate probabilistic trade outputs for improved execution reliability.
+Bias Mitigation: Used purged K-fold cross-validation to eliminate look-ahead bias and ensure robust out-of-sample validation.
+Volatility Sizing: Developed a custom Kelly Criterion position-sizing model that dynamically adjusts trade exposure based on market conditions.
+Performance Metrics: Achieved an annualized return of 13.3%, a maximum drawdown of 4.48%, and a Sharpe ratio of 1.20.
+Research Foundation: Integrated methodologies from academic papers, proprietary research, and frameworks from Marcos López de Prado and Hudson & Thames.
+Tech Stack
+Programming Language: Python
+Libraries: Pandas, NumPy, Scikit-Learn, XGBoost, TensorFlow, ML techniques, etc
+Development Tools: Jupyter Notebook
+
+Modifying Results:
+
+1. Modify the rolling spread calculation in StatArb.
+2. Modify the parameters that go into the target labelling. (self.period, self.SR, self.RF). These are found in:
+Labelling.py, Feature_Importance.py & ML-Models.py.
+3. Modify the parameters in Backtest.py.
+Optional: 4. Can also modify the pair selection ML method in PairSelection.py.
+
+Running the Code:
+
+To run the code simply run StatArb.py
+
+Future Improvements:
+
+Enhance meta-labelling by incorporating additional ML models for signal validation.
+Implement more meaningfull features that have more predictive power.
+Expand the number of assets for more diverse pairs selection.
+
+Author
+
+Owen Thacker

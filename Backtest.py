@@ -1140,20 +1140,6 @@ class PortfolioBacktest:
             print("No portfolio data to visualize")
             return
         
-        # Debug: Print information about the pair_results
-        print("Debugging pair_results:")
-        for pair, data in self.pair_results.items():
-            if 'equity_curve' in data:
-                print(f"Pair: {pair}")
-                print(f"  - Equity curve shape: {data['equity_curve'].shape}")
-                print(f"  - Equity curve index type: {type(data['equity_curve'].index)}")
-                print(f"  - Equity curve value type: {type(data['equity_curve'].iloc[0]) if len(data['equity_curve']) > 0 else 'Empty'}")
-                print(f"  - Equity curve range: {data['equity_curve'].min()} to {data['equity_curve'].max()}")
-                print(f"  - Equity curve has {data['equity_curve'].nunique()} unique values")
-                # Check if values are mostly the same (potentially flat line)
-                if data['equity_curve'].nunique() <= 3:
-                    print(f"  - WARNING: Very few unique values in equity curve for {pair}")
-        
         # Refined Professional Color Palette
         color_palette = {
             'background': '#FFFFFF',  # Clean white background
@@ -1251,27 +1237,39 @@ class PortfolioBacktest:
         # Pairwise Performance Charts
         ax_equity = fig.add_subplot(gs[2, 0])
         ax_box = fig.add_subplot(gs[2, 1])
-        
+
+        # Boxplot positions and data initialization
         box_positions, box_data = [], []
-        
+
         for i, (pair, data) in enumerate(self.pair_results.items()):
             print(f"Processing pair: {pair}")
 
-            if pair in portfolio_df:  # Use portfolio_df instead
-                equity_data = portfolio_df[pair].cumsum()  # Convert daily returns to cumulative sum
+            if pair in portfolio_df:  # Ensure portfolio_df contains the pair
+                # Equity curve (cumulative sum of raw data, not daily returns)
+                equity_data = portfolio_df[pair].cumsum()  # Cumulative sum for equity curve
 
-                # Only plot if there is variation
+                # Only plot equity curve if there is variation
                 if len(equity_data) > 1 and equity_data.nunique() > 1:
                     try:
                         ax_equity.plot(equity_data.index, equity_data, 
-                                    label=pair, linewidth=2, alpha=0.7)
+                                        label=pair, linewidth=2, alpha=0.7)
                     except Exception as e:
                         print(f"  - Error plotting {pair} equity curve: {e}")
                 else:
                     print(f"  - Skipping plot for {pair} - insufficient variation in data")
+
+                # Calculate daily returns for the boxplot
+                daily_returns = portfolio_df[pair].pct_change().dropna()  # Daily returns (percentage change)
+                
+                # Only include boxplot data if there is variation in daily returns
+                if len(daily_returns) > 1 and daily_returns.nunique() > 1:
+                    box_positions.append(i + 1)  # Position for boxplot (1-based index)
+                    box_data.append(daily_returns.values)  # Store daily returns for the boxplot
+
             else:
                 print(f"  - No data for {pair} in portfolio_df")
-        
+
+        # Plot settings for equity curves
         ax_equity.set_title('Pairwise Equity Curves', 
                             fontsize=14, 
                             color=color_palette['primary'], 
@@ -1289,21 +1287,21 @@ class PortfolioBacktest:
         if box_data and box_positions:
             box_props = dict(linestyle='-', linewidth=1.5, color=color_palette['secondary'])
             ax_box.boxplot(box_data, positions=box_positions, widths=0.5, 
-                        patch_artist=True, boxprops=box_props)
+                           patch_artist=True, boxprops=box_props)
             ax_box.set_xticks(box_positions)
             ax_box.set_xticklabels([pair for pair in self.pair_results.keys()], 
-                                    rotation=45, ha='right')
-            ax_box.set_title('Pairwise Returns Distribution', 
-                            fontsize=14, 
-                            color=color_palette['primary'], 
-                            fontweight='bold')
+                                   rotation=45, ha='right')
+            ax_box.set_title('Pairwise Daily Returns Distribution', 
+                             fontsize=14, 
+                             color=color_palette['primary'], 
+                             fontweight='bold')
             ax_box.grid(True, linestyle='--', linewidth=0.5, color=color_palette['grid'])
         else:
             print("No data for box plot")
-            ax_box.set_title('No Data for Returns Distribution', 
-                            fontsize=14, 
-                            color=color_palette['primary'], 
-                            fontweight='bold')
+            ax_box.set_title('No Data for Daily Returns Distribution', 
+                             fontsize=14, 
+                             color=color_palette['primary'], 
+                             fontweight='bold')
         
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         

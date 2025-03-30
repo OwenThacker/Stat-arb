@@ -12,6 +12,7 @@ class DataFetch:
 
     def reading_processing_data(self):
         data = pd.read_csv(self.file_name, index_col=0)
+        data.index = pd.to_datetime(data.index, errors='coerce')
         data = data.apply(pd.to_numeric, errors='coerce')
         self.returns = data.pct_change().dropna()
         self.pricing = data

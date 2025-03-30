@@ -77,7 +77,10 @@ class StatArb:
         """
         Uses the loaded data and pairs to create dataframes for each pair.
         """
+    
+        pricing = self.pricing
         returns = self.returns.reindex(self.pricing.index)
+        print("pricing Index Range:", pricing.index.min(), "-", pricing.index.max())
 
         for pair in self.pairs:
             stock1 = pair[0].replace(' ', '_')
@@ -963,8 +966,8 @@ class StatArb:
                 fft_filtered[num_:-num_] = 0  # Zero out frequencies except the first and last 'num_'
             
             # Compute inverse FFT
-            reconstructed_series = np.fft.ifft(fft_filtered).real
-            
+            reconstructed_series = np                                                                                                                                                                                                                                                                                                                                                                                       .fft.ifft(fft_filtered).real
+
             # Add to DataFrame
             fft_features[f'z_score_fft_recon_{num_}'] = reconstructed_series
         
@@ -976,7 +979,7 @@ class StatArb:
     def arima_model(self, pair_df: pd.DataFrame, order=(1, 0, 0)) -> pd.DataFrame: # 1,0,0
         """
         Fit an ARIMA model to the z-score series and return a DataFrame with combined fitted and predicted values for machine learning
-        model training. The 1,0,1 model was tested and found to be the best in general, based on summary statistics and statistical plots.
+        model training. The 1,0,0 model was tested and found to be the best in general, based on summary statistics and statistical plots.
         """
 
         z_score_returns = pair_df['z_score_returns']
@@ -1188,7 +1191,7 @@ def run_multiple_pairs(stat_arb, pairs_to_process=None, max_pairs=None):
         final_df, accuracy = stat_arb.Run_NN(stock1_orig, stock2_orig, returns, normalized_df)
         
         # Filter to relevant period
-        final_df = final_df.loc[final_df.index >= '2021-03-01']
+        # final_df = final_df.loc[final_df.index >= '2021-03-01'] # This is due to no test period on the first training data set
         
         # Combine model results
         combined_final = stat_arb.Combining_Models(base_model_result, final_df, normalized_df)
@@ -1204,10 +1207,10 @@ def run_multiple_pairs(stat_arb, pairs_to_process=None, max_pairs=None):
         print(f"Completed processing pair {pair_name}")
         
     # Calculate portfolio performance
-    portfolio.calculate_portfolio_performance()
+    portfolio_df = portfolio.calculate_portfolio_performance()
     
     # Visualize portfolio results
-    portfolio.visualize_portfolio()
+    portfolio.visualize_portfolio(portfolio_df)
     
     # Export results
     portfolio.export_results(f"portfolio_results_{len(pairs_to_process)}_pairs.csv")

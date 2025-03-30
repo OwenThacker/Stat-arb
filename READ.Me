@@ -2,9 +2,9 @@ Statistical Arbitrage Trading Strategy
 
 Overview:
 
-This project explores a statistical arbitrage trading strategy by identifying cointegrated asset pairs, applying advanced feature selection, 
-and refining trade signals using machine learning techniques. The methodology integrates clustering, logistic regression, LSTMs, and 
-volatility-based position sizing to optimize trade execution and risk-adjusted returns.
+This project uses a statistical arbitrage trading strategy by identifying cointegrated asset pairs, applying feature selection, 
+and daul pipeline machine learning model with metelabelling for refined entry positioning. The project integrates clustering, 
+logistic regression, LSTMs, and a custom kelly criterion volatility-based position sizing to optimize trade execution and risk-adjusted returns.
 
 Features & Methodology:
 
@@ -20,15 +20,17 @@ Research Foundation: Integrated methodologies from academic papers, proprietary 
 Tech Stack
 Programming Language: Python
 Libraries: Pandas, NumPy, Scikit-Learn, XGBoost, TensorFlow, ML techniques, etc
-Development Tools: Jupyter Notebook
 
 Modifying Results:
 
 1. Modify the rolling spread calculation in StatArb.
 2. Modify the parameters that go into the target labelling. (self.period, self.SR, self.RF). These are found in:
 Labelling.py, Feature_Importance.py & ML-Models.py.
-3. Modify the parameters in Backtest.py.
-Optional: 4. Can also modify the pair selection ML method in PairSelection.py.
+3. Modify the parameters in Backtest.py. Most are found in __init__, however, make sure to modify z_score_volatility in the kelly criterion method.
+Optional: 4, Can modify the kelly weighting (weight_kelly) in the kelly criterion method in Backtest.py
+Optional: 5. Can also modify the pair selection ML method in PairSelection.py. (DBSCAN or Optics)
+Optional: 6. Can modify the stop loss and take profit criteria (based on cumualtive return or z_score movement) in Backtest.py.
+Optional: 7. Can modify the filter for trading in Backtest.py (long_condition & short_condition)
 
 Running the Code:
 
@@ -39,6 +41,7 @@ Future Improvements:
 Enhance meta-labelling by incorporating additional ML models for signal validation.
 Implement more meaningfull features that have more predictive power.
 Expand the number of assets for more diverse pairs selection.
+Lower the data frequency for more trading opportunities (intraday) to reduce effect noise in the strategy.
 
 Author
 

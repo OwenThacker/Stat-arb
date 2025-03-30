@@ -40,7 +40,7 @@ class LogisticRegressionClassifier:
         self.dates = None
         self.period = 3 # N - Prediction Horizon
         self.SR = 1.0 # SF - Sharpe Ratio
-        self.RF = 0.02 / 252 # RF - Risk Free Rate (daily, assumed 2% annual)
+        self.RF = 0 # 0.02 / 252 # RF - Risk Free Rate (daily, assumed 2% annual)
 
     def prepare_data(self):
         """
@@ -208,9 +208,9 @@ class Neural_Network:
         self.purged_k_cv = Purged_K_CV()  
         self.dates = None
         self.threshold = 0.5  # For precision classification scoring of second model
-        self.period = 3 # N - Prediction Horizon, Best is 30 with 4.0
+        self.period = 3 # N - Prediction Horizon
         self.SR = 1.0 # SF - Sharpe Ratio
-        self.RF = 0.02 / 252 # RF - Risk Free Rate (daily, assumed 2% annual)
+        self.RF = 0 # 0.02 / 252 # RF - Risk Free Rate (daily, assumed 2% annual)
         self.platt_scaler = LogisticRegression()  # Logistic Regression for Platt Scaling
         self.model = self.build_model()  # Build model
 
@@ -389,22 +389,7 @@ class Neural_Network:
         for feature_name, feature_series in window_features.items():
             features_df[feature_name] = feature_series
         
-        # 6. Bollinger Bands with Dynamic Windows
-        for window in [3, 5, 7, 20, 50, 100]:
-            ma = features_df[f'z_score_mean_{window}d']
-            std = features_df[f'z_score_std_{window}d']
-            
-            features_df[f'z_score_bb_upper_{window}d'] = ma + (std * 2)
-            features_df[f'z_score_bb_lower_{window}d'] = ma - (std * 2)
-            features_df[f'z_score_bb_width_{window}d'] = (features_df[f'z_score_bb_upper_{window}d'] - features_df[f'z_score_bb_lower_{window}d']) / ma
-            features_df[f'z_score_bb_position_{window}d'] = (z_score - features_df[f'z_score_bb_lower_{window}d']) / (features_df[f'z_score_bb_upper_{window}d'] - features_df[f'z_score_bb_lower_{window}d'])
-        
-        # 7. Crossing Indicators
-        for window in [3, 5, 7, 10, 20, 50]:
-            ma = features_df[f'z_score_mean_{window}d']
-            features_df[f'z_score_cross_ma_{window}d'] = ((z_score > ma) & (z_score.shift(1) <= ma.shift(1))) | ((z_score < ma) & (z_score.shift(1) >= ma.shift(1)))
-        
-        # 8. Regime Change Indicators
+        # 6. Regime Change Indicators
         def calculate_cusum(series, threshold=0.5):
             cusum_up = np.zeros_like(series)
             cusum_down = np.zeros_like(series)
@@ -419,13 +404,13 @@ class Neural_Network:
         
         features_df['z_score_cusum_up'], features_df['z_score_cusum_down'] = calculate_cusum(z_score)
         
-        # 9. Extreme Value Indicators
+        # 7. Extreme Value Indicators
         extreme_thresholds = [1, 2, 3]
         for threshold in extreme_thresholds:
             features_df[f'z_score_above_{threshold}'] = (z_score > threshold).astype(int)
             features_df[f'z_score_below_neg_{threshold}'] = (z_score < -threshold).astype(int)
         
-        # 10. Exponential Moving Averages
+        # 8. Exponential Moving Averages
         for window in [3, 5, 7, 10, 20, 50, 100]:
             features_df[f'z_score_ema_{window}d'] = z_score.ewm(span=window, adjust=False).mean()
         
@@ -503,7 +488,7 @@ class Neural_Network:
         model = keras.Model(inputs=inputs, outputs=outputs)
         
         # Use a lower learning rate
-        optimizer = keras.optimizers.Adam(learning_rate=0.01, clipnorm=1.0)
+        optimizer = keras.optimizers.Adam(learning_rate=0.1, clipnorm=1.0)
         
         model.compile(
             optimizer=optimizer,

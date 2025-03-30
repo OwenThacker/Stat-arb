@@ -4,7 +4,7 @@ import tensorflow as tf
 from sklearn.metrics import recall_score, precision_score
 from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import KFold
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.calibration import CalibratedClassifierCV
 from scikeras.wrappers import KerasClassifier
 from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
@@ -14,7 +14,7 @@ import numpy.fft as fft
 
 class Purged_K_CV:
 
-    def __init__(self, n_splits=3, purge_window=10, patience=5):
+    def __init__(self, n_splits=6, purge_window=10, patience=5):
         """
         Initialize the Purged_K_CV class.
         """
@@ -463,7 +463,7 @@ class Purged_K_CV:
         # Initialize EarlyStopping callback with more patience
         early_stopping = tf.keras.callbacks.EarlyStopping(
             monitor='val_precision', 
-            patience=10,
+            patience=5,
             mode='max',
             verbose=1, 
             restore_best_weights=True
@@ -853,7 +853,6 @@ class Purged_K_CV:
         print(f"True values distribution: {np.bincount(y.astype(int))}")
         
         # Calculate and print metrics
-        from sklearn.metrics import classification_report, confusion_matrix
         print("\nClassification Report:")
         print(classification_report(y, results_data['prediction']))
         

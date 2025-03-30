@@ -17,26 +17,27 @@ class Backtest:
         self.stock1 = stock1
         self.stock2 = stock2
         self.data = data
-        self.combined_final = combined_final  # Using combined_df directly now
+        self.combined_final = combined_final  
         self.final_df = final_df
-        self.z_score = normalized_df['z_score']
+        self.z_score = normalized_df['z_score']                                                                                                     
         self.returns = returns
         self.cum_returns = None
-        self.daily_returns = None
+        self.daily_returns = None                                                                                                           
         self.strategy_returns = None
         self.position_sizes = None
         self.trades = None
         self.metrics = {}
         self.completed_trades = []
         
-        # Parameters for stop loss and take profit
-        self.base_stop_loss_scale = 0.15 # \\ Alternative Optimal 8.0 risk-reward, 5 day window, 3 day vol base stop - 0.15, max pos 20, vol factor 0, pos scaling 6
-        self.risk_reward_ratio = 8.0
+        # Parameters for stop loss, take profit and max holding period
+        self.base_stop_loss_scale = 0.001 # \\ 0.001, 1.3, 7, window [5,3], volatiltiy factor 0
+        self.risk_reward_ratio =  1.3 # 
+        self.max_holding = 7
         
         # Position sizing parameters
         self.min_position_size = 0.1
         self.max_position_size = 2.5
-        self.max_concurrent_positions = 20
+        self.max_concurrent_positions = 50
         self.first_position_size = 0.50
         self.position_scaling_factor = 1.0 # \\ Used as a risk factor control for position sizing
         
@@ -45,8 +46,8 @@ class Backtest:
         self.transaction_cost_percentage = 0.001 # (0.1% transaction cost per trade)
 
         # Volatillity
-        self.z_volatility_window = 12
-        self.volatility_factor = 0 # (1/10 starting reference value) # Used to dynamically adjust stop loss size.(squared)
+        self.z_volatility_window = 2
+        self.volatility_factor = 0 # Used to dynamically adjust stop loss size.
         
         # Direction tracking
         self.direction_success = {1: 0, -1: 0}
@@ -55,7 +56,7 @@ class Backtest:
 
         # Trailing stop loss parameters
         self.trailing_stop_loss = False # Enable/disable trailing stop loss
-        self.trailing_threshold = 0.35  # 35% drawdown from peak profit triggers exit
+        self.trailing_threshold = 0.20  # 20% drawdown from peak profit triggers exit
 
     def run_backtest(self):
         print('📌 Running backtest with Kelly position sizing and simplified signal logic...')
@@ -78,18 +79,18 @@ class Backtest:
         backtest_df['z_velocity'] = z_score_velocity
         
         # Apply mean reversion filters:
-        # 1. For long positions (signal=1): z-score must be below -1.25 (oversold)
-        # 2. For short positions (signal=-1): z-score must be above 1.25 (overbought)
+        # 1. For long positions (signal=1): z-score must be below -1.00 (oversold)
+        # 2. For short positions (signal=-1): z-score must be above 1.00 (overbought)
         
         # Initialize filtered prediction
         backtest_df['filtered_prediction'] = 0
         
-        # Apply mean reversion logic for longs: signal=1 and z-score < -1.25
-        long_condition = (backtest_df['prediction'] == 1) & (z_score < -1.25)
+        # Apply mean reversion logic for longs: signal=1 and z-score < -1.00
+        long_condition = (backtest_df['prediction'] == 1) & (z_score < -1.0)
         backtest_df.loc[long_condition, 'filtered_prediction'] = 1
         
-        # Apply mean reversion logic for shorts: signal=-1 and z-score > 1.25
-        short_condition = (backtest_df['prediction'] == -1) & (z_score > 1.25)
+        # Apply mean reversion logic for shorts: signal=-1 and z-score > 1.00
+        short_condition = (backtest_df['prediction'] == -1) & (z_score > 1.0)
         backtest_df.loc[short_condition, 'filtered_prediction'] = -1
         
         # Store trades for analysis
@@ -100,8 +101,10 @@ class Backtest:
         stock2_returns = self.returns[self.stock2]
 
         # Ensure datetime index
-        stock1_returns.index = pd.to_datetime(stock1_returns.index)
-        stock2_returns.index = pd.to_datetime(stock2_returns.index)
+        stock1_returns.index = pd.to_datetime(stock1_returns.index).tz_localize(None)
+        stock2_returns.index = pd.to_datetime(stock2_returns.index).tz_localize(None)
+
+        backtest_df.index = pd.to_datetime(backtest_df.index).tz_localize(None)
         
         # Create a DataFrame to track position sizes
         position_size_df = pd.DataFrame(index=backtest_df.index)
@@ -134,146 +137,92 @@ class Backtest:
         stop_loss_levels = []
         take_profit_levels = []
         
-        # Run through the backtest day by day
         for i in range(len(position_size_df)):
-            current_date = position_size_df.index[i]
+            current_date = position_size_df.index[i].replace(tzinfo=None)
             daily_total_return = 0.0
             positions_to_remove = []
-            
-            # Get current z-score volatility
-            current_z_volatility = z_volatility.iloc[i]
             
             # Calculate daily returns for existing positions and check for exits
             for idx, position in enumerate(self.active_positions):
                 # Update days held
                 position['days_held'] += 1
+                position['entry_date'] = position['entry_date'].replace(tzinfo=None)
                 
-                # Calculate the current z-score change since entry
-                zscore_change = z_score.loc[current_date] - position['entry_zscore']
-                
-                # Check standard exit conditions
-                take_profit_hit = (position['direction'] == 1 and zscore_change >= position['take_profit_level']) or \
-                                (position['direction'] == -1 and zscore_change <= -position['take_profit_level'])
-
-                stop_loss_hit = (position['direction'] == 1 and zscore_change <= position['stop_loss_level']) or \
-                            (position['direction'] == -1 and zscore_change >= -position['stop_loss_level'])
-                
-                # New trailing stop loss logic
-                trailing_stop_exit = False
-                if self.trailing_stop_loss:
-                    # Track peak cumulative return for this position
-                    position['peak_cumulative_return'] = max(
-                        position.get('peak_cumulative_return', position['cumulative_return']), 
-                        position['cumulative_return']
-                    )
-                    
-                    # Check if position has dropped more than trailing threshold from peak
-                    trailing_stop_exit = (
-                        position['cumulative_return'] <= 
-                        position['peak_cumulative_return'] * (1 - self.trailing_threshold)
-                    )
-                
-                # Determine if we should exit the position
-                exit_position = take_profit_hit or stop_loss_hit or trailing_stop_exit
-                
-                # Calculate daily return for this position
+                # Calculate actual cumulative returns for the specific position
                 if i > 0 and current_date in stock1_returns.index and current_date in stock2_returns.index:
-                    # For a pairs trade:
-                    # - Direction 1: Long stock1, Short stock2
-                    # - Direction -1: Short stock1, Long stock2
+                    # Pairs trade return calculation for this specific position
                     daily_pos_return = ((stock1_returns.loc[current_date] * position['direction']) - 
                         (stock2_returns.loc[current_date] * position['direction'])) * position['position_size']
                     
-                    # Update position performance
-                    position['cumulative_return'] = position.get('cumulative_return', 0) + daily_pos_return
-                    
-                    # Add to daily total return
+                    # Update cumulative return for this specific position
+                    position['cumulative_return'] += daily_pos_return
                     daily_total_return += daily_pos_return
                     
-                    # Update equity
-                    current_equity *= (1 + daily_pos_return)
-                    max_equity = max(max_equity, current_equity)
-                
-                # If exiting, mark position for removal and record trade details
-                if exit_position:
-                    positions_to_remove.append(idx)
-                    
-                    # Update direction success tracking
-                    if take_profit_hit:
-                        self.direction_success[position['direction']] += 1
-                    
-                    # Decrement position count for this direction
-                    self.direction_positions[position['direction']] = max(0, self.direction_positions[position['direction']] - 1)
-                    
-                    # Add exit point for visualization
-                    exit_points.append({
-                        'date': current_date,
-                        'zscore': z_score.loc[current_date],
-                        'direction': position['direction'],
-                        'reason': "Take Profit" if take_profit_hit else "Trailing Stop" if trailing_stop_exit else "Stop Loss"
-                    })
-                    
-                    # Record completed trade details
-                    if position['entry_date'] is not None:
-                        try:
-                            entry_index = backtest_df.index.get_loc(position['entry_date'])
-                            exit_index = i
-                            
-                            if entry_index < exit_index:
-                                holding_dates = backtest_df.index[entry_index:exit_index+1]
-                                valid_dates = [d for d in holding_dates if d in stock1_returns.index and d in stock2_returns.index]
-                                
-                                if valid_dates:
-                                    # Calculate returns for both stocks
-                                    stock1_daily_returns = stock1_returns.loc[valid_dates]
-                                    stock2_daily_returns = stock2_returns.loc[valid_dates]
-                                    
-                                    # Calculate cumulative returns
-                                    stock1_cum_return = (1 + stock1_daily_returns).prod() - 1
-                                    stock2_cum_return = (1 + stock2_daily_returns).prod() - 1
-                                    
-                                    # Raw trade return
-                                    raw_trade_return = (stock1_cum_return * position['direction']) - (stock2_cum_return * position['direction'])
-                                    
-                                    # Apply transaction costs
-                                    transaction_cost = (self.transaction_cost_fixed + 
-                                                    position['position_size'] * self.transaction_cost_percentage)
-                                    adjusted_trade_return = raw_trade_return - transaction_cost
-                                    
-                                    # Calculate PnL
-                                    pnl = raw_trade_return * position['position_size']
-                                    
-                                    # Store trade details
-                                    trade_details = {
-                                        'entry_date': position['entry_date'],
-                                        'exit_date': current_date,
-                                        'holding_period': position['days_held'],
-                                        'direction': "Long " + self.stock1 + "/Short " + self.stock2 if position['direction'] == 1 else 
-                                                "Short " + self.stock1 + "/Long " + self.stock2,
-                                        'entry_zscore': position['entry_zscore'],
-                                        'exit_zscore': z_score.loc[current_date],
-                                        'zscore_change': z_score.loc[current_date] - position['entry_zscore'],
-                                        'position_size': position['position_size'],
-                                        
-                                        # New fields for stock cumulative returns
-                                        'stock1_cum_return': stock1_cum_return,
-                                        'stock2_cum_return': stock2_cum_return,
-                                        
-                                        'return': raw_trade_return,
-                                        'pnl': pnl,
-                                        'adjusted_return': adjusted_trade_return,
-                                        'exit_reason': "Take Profit" if take_profit_hit else "Trailing Stop" if trailing_stop_exit else "Stop Loss",
-                                        'stop_loss_level': position['stop_loss_level'],
-                                        'take_profit_level': position['take_profit_level'],
-                                        'n_days_traded': len(valid_dates) - 1,  # Excluding entry day
-                                    }
-                                    trade_details['peak_return'] = position.get('peak_cumulative_return', 0)
+                    # Simplified Stop Loss Condition
 
-                                    self.completed_trades.append(trade_details)
-                        except Exception as e:
-                            print(f"Error processing trade exit: {e}")
+                    # Z-Score Exit Conditions
+                    current_z_score = z_score.loc[current_date]
+
+                    # ------------ z_score based exit ----------
+                    
+                    # Exit long position conditions
+                    # if position['direction'] == 1:
+                    #     # Exit long if z-score falls below stop loss (mean reversion)
+                    #     stop_loss_exit = current_z_score >= position['entry_zscore'] + dynamic_stop_loss
+                    
+                    # # Exit short position conditions  
+                    # elif position['direction'] == -1:
+                    #     # Exit short if z-score rises above stop loss (mean reversion)
+                    #     stop_loss_exit = current_z_score >= position['entry_zscore'] - dynamic_stop_loss
+                    
+                    # # Exit long position conditions - take profit
+                    # if position['direction'] == 1:
+                    #     # Exit long if z-score rises above take profit (mean reversion)
+                    #     take_profit_exit = current_z_score >= position['entry_zscore'] + dynamic_take_profit
+                    
+                    # # Exit short position conditions  
+                    # elif position['direction'] == -1:
+                    #     # Exit short if z-score falls bellow take profit (mean reversion)
+                    #     take_profit_exit = current_z_score >= position['entry_zscore'] - dynamic_take_profit
+
+                    # ------- Cumulative return based exit ----------
+
+                    # Exit if absolute cumulative return exceeds stop loss level
+                    stop_loss_exit = (position['cumulative_return']) <= (position['stop_loss_level'])
+                    
+                    # Take Profit Condition
+                    take_profit_exit = (position['cumulative_return']) >= (position['take_profit_level'])
+
+                    # Maximum Holding Period
+                    max_holding_period_exit = position['days_held'] >= self.max_holding
+                    
+                    # Determine if we should exit this specific position
+                    exit_position = stop_loss_exit or take_profit_exit or max_holding_period_exit
+                    
+                    if exit_position:
+                        positions_to_remove.append(idx)
+                        
+                        # Determine exit reason
+                        exit_reason = (
+                            "Stop Loss" if stop_loss_exit else
+                            "Take Profit" if take_profit_exit else
+                            "Max Holding Period"
+                        )
+                        
+                        # Record completed trade details
+                        trade_details = {
+                            'entry_date': position['entry_date'],
+                            'exit_date': current_date,
+                            'holding_period': position['days_held'],
+                            'direction': "Long/Short" if position['direction'] == 1 else "Short/Long",
+                            'return': position['cumulative_return'],
+                            'pnl': position['cumulative_return'] * position['position_size'],
+                            'position_size': position['position_size'],
+                            'exit_reason': exit_reason
+                        }
+                        self.completed_trades.append(trade_details)
             
-            # Remove closed positions (in reverse order to avoid index issues)
+            # Remove closed positions
             for idx in sorted(positions_to_remove, reverse=True):
                 self.active_positions.pop(idx)
                 
@@ -303,8 +252,10 @@ class Backtest:
                 except (KeyError, AttributeError):
                     current_probability = 0.6
                 
+                current_z_volatility = z_score.rolling(window=5).std()[i]
+                
                 # Calculate dynamic stop loss INDEPENDENTLY of position sizing
-                volatility_factor = max(current_z_volatility * (self.volatility_factor), 0.01) 
+                volatility_factor = 0 if self.volatility_factor == 0 else max(current_z_volatility * (self.volatility_factor), 0.01)
                 
                 # Stop loss calculation is now completely separate from position sizing
                 dynamic_stop_loss = -self.base_stop_loss_scale * (1 + volatility_factor)
@@ -315,6 +266,7 @@ class Backtest:
                 # Create new position with placeholder size to be determined by Kelly
                 new_position = {
                     'direction': current_direction,
+                    'is_new': True,  # Flag as new
                     'entry_date': current_date,
                     'entry_zscore': z_score.loc[current_date],
                     'position_size': 0.0,  # Will be set by Kelly criterion
@@ -324,8 +276,7 @@ class Backtest:
                     'cumulative_return': 0.0,
                     'position_count': direction_count,
                     'win_prob': current_probability
-                }
-                
+                }       
                 # Add to active positions
                 self.active_positions.append(new_position)
                 
@@ -404,10 +355,11 @@ class Backtest:
         
         # Return performance metrics
         return self.metrics
-        
+
     def kelly_position_sizing(self, current_date):
         """
         Calculate position sizes using the Adapted Kelly Criterion for investment environments.
+        Applies the Kelly criterion to new positions only.
         """
         if not self.active_positions:
             return
@@ -421,45 +373,46 @@ class Backtest:
         except (KeyError, AttributeError):
             current_probability = 0.6
 
-        positions_by_direction = {1: [], -1: []}
-        for pos in self.active_positions:
-            positions_by_direction[pos['direction']].append(pos)
+        # Separate new positions
+        new_positions = [pos for pos in self.active_positions if pos.get('is_new', False)]
 
-        for direction, positions in positions_by_direction.items():
-            if not positions:
-                continue
+        for pos in new_positions:  # Apply the Kelly criterion only to new positions
+            p = pos.get('win_prob', current_probability)
+            q = 1 - p
 
-            sorted_positions = sorted(positions, key=lambda x: x.get('entry_date', pd.Timestamp.now()))
+            loss_pct = 1.0  
+            win_pct = self.risk_reward_ratio  
 
-            for i, pos in enumerate(sorted_positions):
-                pos['position_count'] = i + 1
-                p = pos.get('win_prob', current_probability)
-                q = 1 - p
+            # Kelly Formula: f* = (p / loss_pct) - (q / win_pct)
+            kelly_fraction = (p / loss_pct) - (q / win_pct)
+            half_kelly = max(0, kelly_fraction * 0.5)  # Ensure non-negative Kelly fraction
 
-                loss_pct = 1.0  
-                win_pct = self.risk_reward_ratio  
+            z_score_volatility = self.z_score.rolling(window=5).std()
+            curr_z_volatility = z_score_volatility.loc[current_date]
+            curr_z_score = self.z_score.loc[current_date]
 
-                # Kelly Formula: f* = (p / loss_pct) - (q / win_pct)
-                kelly_fraction = (p / loss_pct) - (q / win_pct)
-                half_kelly = max(0, kelly_fraction * 0.5)  # Ensure non-negative Kelly fraction
+            # Ensure volatility is nonzero to avoid division errors
+            if curr_z_volatility == 0 or np.isnan(curr_z_volatility):
+                curr_z_volatility = 1e-6  # Small value to prevent division by zero
 
-                z_score_volatility = self.z_score.rolling(window=12).std()
-                curr_z_volatility = z_score_volatility.loc[current_date]
-                curr_z_score = self.z_score.loc[current_date]
+            weight_kelly = 0.9  # This ensure the half kelly maintains dominance
+            weight_adjustment = 1 - weight_kelly  # Keeps other parameters so they still contribute, but smaller variation
 
-                # Ensure volatility is nonzero to avoid division errors
-                if curr_z_volatility == 0 or np.isnan(curr_z_volatility):
-                    curr_z_volatility = 1e-6  # Small value to prevent division by zero
+            # Calculate final position size
+            final_position_size = (weight_kelly * half_kelly) + (weight_adjustment * half_kelly * (1 / np.sqrt(curr_z_volatility)) * self.position_scaling_factor)
 
-                # Calculate final position size
-                final_position_size = half_kelly * (1 / np.sqrt(curr_z_volatility)) * self.position_scaling_factor
-                
-                # Ensure position size is between 0.1 and 1
-                pos['position_size'] = min(1, max(0.1, final_position_size))
+            # Ensure position size is between 0.1 and 1
+            pos['position_size'] = min(1, max(0.1, final_position_size))
 
-        self.direction_positions[direction] = len(positions)
+        # Optionally mark positions as "not new" after sizing
+        for pos in new_positions:
+            pos['is_new'] = False  # Mark position as processed for future runs
 
-       
+        # Optional: update the direction_positions as needed
+        # for direction, positions in positions_by_direction.items():
+        #     self.direction_positions[direction] = len(positions)
+
+
     def calculate_rolling_metrics(self):
         """Calculate rolling performance metrics."""
         # Calculating rolling returns
@@ -503,26 +456,20 @@ class Backtest:
             total_return = self.cum_returns.iloc[-1]
         else:
             total_return = 0.0
-        
+
         # Calculate annualized return
         if len(self.daily_returns) > 0:
             days = len(self.daily_returns)
             annualized_return = ((1 + total_return) ** (252 / days)) - 1
         else:
             annualized_return = 0.0
-        
-        # Calculate annualized volatility
-        if len(self.daily_returns) > 0:
-            annualized_volatility = self.daily_returns.std() * np.sqrt(252)
-        else:
-            annualized_volatility = 0.0
-        
+
         # Calculate Sharpe ratio (assuming 0% risk-free rate)
-        if annualized_volatility > 0:
-            sharpe_ratio = annualized_return / annualized_volatility
+        if len(self.daily_returns) > 0 and self.daily_returns.std() > 0:
+            sharpe_ratio = annualized_return / (self.daily_returns.std() * np.sqrt(252))
         else:
             sharpe_ratio = 0.0
-        
+
         # Calculate maximum drawdown
         if len(self.daily_returns) > 0:
             cum_returns = (1 + self.daily_returns).cumprod()
@@ -531,47 +478,42 @@ class Backtest:
             max_drawdown = drawdowns.min()
         else:
             max_drawdown = 0.0
-        
-        # Calculate win rate from completed trades
+
+        # Calculate expectancy and win rate from completed trades
         if self.completed_trades:
             profitable_trades = [trade for trade in self.completed_trades if trade['pnl'] > 0]
-            win_rate = len(profitable_trades) / len(self.completed_trades)
-            
-            # Calculate average profit and loss
-            if profitable_trades:
-                avg_profit = sum(trade['pnl'] for trade in profitable_trades) / len(profitable_trades)
-            else:
-                avg_profit = 0.0
-                
             losing_trades = [trade for trade in self.completed_trades if trade['pnl'] <= 0]
-            if losing_trades:
-                avg_loss = sum(trade['pnl'] for trade in losing_trades) / len(losing_trades)
-            else:
-                avg_loss = 0.0
-                
+
+            win_rate = len(profitable_trades) / len(self.completed_trades)
+
+            avg_profit = sum(trade['pnl'] for trade in profitable_trades) / len(profitable_trades) if profitable_trades else 0.0
+            avg_loss = sum(trade['pnl'] for trade in losing_trades) / len(losing_trades) if losing_trades else 0.0
+
+            # Calculate expectancy
+            loss_rate = 1 - win_rate
+            expectancy = (win_rate * avg_profit) - (loss_rate * abs(avg_loss))
+
             # Calculate profit factor
             total_profit = sum(trade['pnl'] for trade in profitable_trades)
             total_loss = sum(abs(trade['pnl']) for trade in losing_trades)
-            if total_loss > 0:
-                profit_factor = total_profit / total_loss
-            else:
-                profit_factor = float('inf') if total_profit > 0 else 0.0
+            profit_factor = total_profit / total_loss if total_loss > 0 else float('inf') if total_profit > 0 else 0.0
         else:
             win_rate = 0.0
             avg_profit = 0.0
             avg_loss = 0.0
             profit_factor = 0.0
-        
+            expectancy = 0.0
+
         # Store the metrics
         self.metrics = {
             'total_return': total_return,
             'annualized_return': annualized_return,
-            'annualized_volatility': annualized_volatility,
             'sharpe_ratio': sharpe_ratio,
             'max_drawdown': max_drawdown,
             'win_rate': win_rate,
             'avg_profit': avg_profit,
             'avg_loss': avg_loss,
+            'expectancy': expectancy,
             'profit_factor': profit_factor,
             'total_trades': len(self.completed_trades)
         }
@@ -580,7 +522,7 @@ class Backtest:
         print('📊 Performance Metrics:')
         print(f'Total Return: {total_return:.2%}')
         print(f'Annualized Return: {annualized_return:.2%}')
-        print(f'Annualized Volatility: {annualized_volatility:.2%}')
+        print(f'Expectancy : {expectancy:.2%}')
         print(f'Sharpe Ratio: {sharpe_ratio:.2f}')
         print(f'Maximum Drawdown: {max_drawdown:.2%}')
         print(f'Win Rate: {win_rate:.2%}')
@@ -631,9 +573,8 @@ class Backtest:
         
         # Set up the figure
         plt.style.use('default')
-        fig = plt.figure(figsize=(15, 22), dpi=100)  # Increased height for new plots
-        # Set the background color of the entire figure to light blue
-        gs = GridSpec(5, 2, figure=fig, height_ratios=[0.5, 1, 1, 1, 1])  # Modified grid layout
+        fig = plt.figure(figsize=(15, 25), dpi=100)  # Increased height further
+        gs = GridSpec(6, 2, figure=fig, height_ratios=[0.5, 1, 1, 1, 1, 1])  # Added a new row
         
         # Define an updated color palette
         royal_blue = '#0047AB'       # Royal blue for titles
@@ -661,7 +602,7 @@ class Backtest:
         metrics = [
             ('Total Return', f"{backtest_instance.metrics['total_return']:.2%}"),
             ('Annualized Return', f"{backtest_instance.metrics['annualized_return']:.2%}"),
-            ('Ann. Volatility', f"{backtest_instance.metrics['annualized_volatility']:.2%}"),
+            ('Expectancy', f"{backtest_instance.metrics['expectancy']:.2%}"),
             ('Sharpe Ratio', f"{backtest_instance.metrics['sharpe_ratio']:.2f}"),
             ('Max Drawdown', f"{backtest_instance.metrics['max_drawdown']:.2%}"),
             ('Win Rate', f"{backtest_instance.metrics['win_rate']:.2%}"),
@@ -738,34 +679,47 @@ class Backtest:
         # 3. Z-SCORE AND TRADES
         ax1 = fig.add_subplot(gs[2, :])
         ax1.set_facecolor(background_color)
-        
+
         # Plot z-score with light blue-gray color
         ax1.plot(backtest_instance.z_score.index, backtest_instance.z_score, color=light_blue_gray, alpha=1.0, linewidth=1.2)
         ax1.axhline(y=0, color='black', linestyle='-', alpha=0.2)
         ax1.axhline(y=1.25, color=royal_blue, linestyle='--', alpha=0.5)
         ax1.axhline(y=-1.25, color=royal_blue, linestyle='--', alpha=0.5)
-        
+
         # Plot entry points with white border
         for entry in backtest_instance.entry_points:
             marker = '^' if entry['direction'] == 1 else 'v'
             color = bright_green if entry['direction'] == 1 else bright_red
             ax1.scatter(entry['date'], entry['zscore'], marker=marker, s=25, color=color, 
-                       edgecolor='white', linewidth=0.8, alpha=0.8)
-        
-        # Plot exit points with white border
-        for exit in backtest_instance.exit_points:
-            if exit['reason'] == 'Take Profit':
-                ax1.scatter(exit['date'], exit['zscore'], marker='o', s=25, color=bright_green, 
-                        edgecolor='white', linewidth=0.8, alpha=0.8)
-            else:  # Stop Loss
-                ax1.scatter(exit['date'], exit['zscore'], marker='x', s=25, color=bright_red, 
-                            edgecolor='white', linewidth=0.8, alpha=0.8)
-        
+                    edgecolor='white', linewidth=0.8, alpha=0.8)
+            
+        # Plot stop loss levels
+        for stop_loss in backtest_instance.stop_loss_levels:
+            if stop_loss['direction'] == 1:  # Long position
+                ax1.scatter(stop_loss['date'], stop_loss['entry_zscore'] + stop_loss['level'], 
+                            marker='_', s=50, color=bright_red, 
+                            edgecolor=bright_red, linewidth=1.5, alpha=0.7)
+            else:  # Short position
+                ax1.scatter(stop_loss['date'], stop_loss['entry_zscore'] - stop_loss['level'], 
+                            marker='_', s=50, color=bright_red, 
+                            edgecolor=bright_red, linewidth=1.5, alpha=0.7)
+
+        # Plot take profit levels
+        for take_profit in backtest_instance.take_profit_levels:
+            if take_profit['direction'] == 1: # Long position
+                ax1.scatter(take_profit['date'], take_profit['entry_zscore'] + take_profit['level'], 
+                            marker='_', s=50, color=bright_green, 
+                            edgecolor=bright_green, linewidth=1.5, alpha=0.7)
+            else:
+                ax1.scatter(take_profit['date'], take_profit['entry_zscore'] - take_profit['level'], 
+                            marker='_', s=50, color=bright_green, 
+                            edgecolor=bright_green, linewidth=1.5, alpha=0.7)
+
         # Set title and labels - black non-bold labels as requested
         ax1.set_title('Z-Score and Trades', color=royal_blue, fontsize=14, fontweight='bold')
         ax1.set_ylabel('Z-Score', color='black', fontsize=12)
         ax1.grid(False)
-        
+
         # Format x-axis
         ax1.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax1.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
@@ -848,7 +802,8 @@ class Backtest:
             ax_winrate.text(0.5, 0.5, 'No completed trades', ha='center', va='center', color=royal_blue)
             ax_winrate.set_title('Win Rate Evolution', color=royal_blue, fontsize=14, fontweight='bold')
         
-        # 5. TRADE RETURNS DISTRIBUTION and POSITION SIZES side by side
+        
+        # 5. TRADE RETURNS DISTRIBUTION and POSITION SIZES side by side (previously 5.)
         ax3 = fig.add_subplot(gs[4, 0])
         ax3.set_facecolor(background_color)
         
@@ -899,6 +854,81 @@ class Backtest:
         ax4.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         ax4.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
         plt.setp(ax4.xaxis.get_majorticklabels(), rotation=45)
+
+
+        # 5. STOCK PRICES WITH TRADES
+        ax_prices = fig.add_subplot(gs[5, :])
+        ax_prices.set_facecolor(background_color)
+
+        # Fetch stock prices for the two stocks
+        stock1_prices = self.data[self.stock1]
+        stock2_prices = self.data[self.stock2]
+
+        # Normalize prices to start at 100 for comparison
+        stock1_norm = stock1_prices / stock1_prices.iloc[0] * 100
+        stock2_norm = stock2_prices / stock2_prices.iloc[0] * 100
+
+        # Plot normalized prices
+        ax_prices.plot(stock1_norm.index, stock1_norm, color=orange, label=self.stock1, linewidth=2, alpha=0.7)
+        ax_prices.plot(stock2_norm.index, stock2_norm, color=pale_purple, label=self.stock2, linewidth=2, alpha=0.7)
+
+        # Safely plot trade entry points
+        if hasattr(backtest_instance, 'entry_points') and backtest_instance.entry_points:
+            for entry in backtest_instance.entry_points:
+                # Convert entry date to datetime and remove time component
+                entry_date = pd.to_datetime(entry['date']).normalize()
+                
+                # Determine actual positions for each stock in the pair
+                if entry['direction'] == 1:
+                    stock1_marker, stock1_color = '^', bright_green  # Long Stock 1
+                    stock2_marker, stock2_color = 'v', bright_red    # Short Stock 2
+                else:  # entry['direction'] == -1
+                    stock1_marker, stock1_color = 'v', bright_red    # Short Stock 1
+                    stock2_marker, stock2_color = '^', bright_green  # Long Stock 2
+                
+                try:
+                    # Explicitly find the closest index
+                    def find_closest_index(index, target_date):
+                        # Convert to numpy datetime64 if needed
+                        if not isinstance(target_date, np.datetime64):
+                            target_date = np.datetime64(target_date)
+                        
+                        # Convert index to numpy datetime64 array
+                        dates_array = index.to_numpy()
+                        
+                        # Find the index of the closest date
+                        closest_idx = np.abs(dates_array - target_date).argmin()
+                        return closest_idx
+                    
+                    # Find closest indices
+                    stock1_closest_idx = find_closest_index(stock1_norm.index, entry_date)
+                    stock2_closest_idx = find_closest_index(stock2_norm.index, entry_date)
+                    
+                    # Get dates and values
+                    stock1_closest_date = stock1_norm.index[stock1_closest_idx]
+                    stock2_closest_date = stock2_norm.index[stock2_closest_idx]
+                    
+                    # Plot markers for both stocks based on actual positions
+                    ax_prices.scatter(stock1_closest_date, stock1_norm.loc[stock1_closest_date], 
+                                    marker=stock1_marker, s=50, color=stock1_color, 
+                                    edgecolor='white', linewidth=0.8, alpha=0.8)
+                    ax_prices.scatter(stock2_closest_date, stock2_norm.loc[stock2_closest_date], 
+                                    marker=stock2_marker, s=50, color=stock2_color, 
+                                    edgecolor='white', linewidth=0.8, alpha=0.8)
+                except Exception as e:
+                    print(f"Could not plot entry point for date {entry_date}: {e}")
+                    continue
+        
+        # Set title and labels
+        ax_prices.set_title('Normalized Stock Prices with Trade Entries', color=royal_blue, fontsize=14, fontweight='bold')
+        ax_prices.set_ylabel('Normalized Price (Start = 100)', color='black', fontsize=12)
+        ax_prices.grid(False)
+        ax_prices.legend(loc='best')
+        
+        # Format x-axis
+        ax_prices.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+        ax_prices.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+        plt.setp(ax_prices.xaxis.get_majorticklabels(), rotation=45)
         
         # Add legend for trade markers - moved to bottom of the figure
         from matplotlib.lines import Line2D
@@ -951,6 +981,7 @@ class Backtest:
             'exit_points': self.exit_points
         }
     
+
 
 
 class PortfolioBacktest:
@@ -1050,7 +1081,7 @@ class PortfolioBacktest:
         returns = self.portfolio_daily_returns
         
         # Annual risk-free rate (e.g., 2%)
-        risk_free_rate = 0.02 / 252  # Daily risk-free rate
+        risk_free_rate = 0.00 / 252  # Daily risk-free rate
         
         # Basic metrics
         self.portfolio_metrics['total_return'] = self.portfolio_cum_returns.iloc[-1]
@@ -1101,13 +1132,27 @@ class PortfolioBacktest:
             
         return self.portfolio_metrics
     
-    def visualize_portfolio(self, figsize=(20, 14)):
+    def visualize_portfolio(self, portfolio_df, figsize=(20, 14)):
         """
         Creates a professional and visually appealing portfolio performance visualization
         """
         if self.portfolio_equity_curve is None:
             print("No portfolio data to visualize")
             return
+        
+        # Debug: Print information about the pair_results
+        print("Debugging pair_results:")
+        for pair, data in self.pair_results.items():
+            if 'equity_curve' in data:
+                print(f"Pair: {pair}")
+                print(f"  - Equity curve shape: {data['equity_curve'].shape}")
+                print(f"  - Equity curve index type: {type(data['equity_curve'].index)}")
+                print(f"  - Equity curve value type: {type(data['equity_curve'].iloc[0]) if len(data['equity_curve']) > 0 else 'Empty'}")
+                print(f"  - Equity curve range: {data['equity_curve'].min()} to {data['equity_curve'].max()}")
+                print(f"  - Equity curve has {data['equity_curve'].nunique()} unique values")
+                # Check if values are mostly the same (potentially flat line)
+                if data['equity_curve'].nunique() <= 3:
+                    print(f"  - WARNING: Very few unique values in equity curve for {pair}")
         
         # Refined Professional Color Palette
         color_palette = {
@@ -1117,7 +1162,7 @@ class PortfolioBacktest:
             'accent': '#3498DB',      # Bright azure blue
             'text': '#2F4F4F',        # Dark slate gray
             'grid': '#ECF0F1',        # Light gray grid
-            'highlight': '#E74C3C',   # Vibrant red for drawdowns
+            'highlight': '#FF8C00',   # Dark orange for drawdowns
             'equity': '#2980B9',      # Professional blue for equity curve
             'chart_background': '#F7F9FA'  # Very light gray-blue for chart backgrounds
         }
@@ -1138,19 +1183,12 @@ class PortfolioBacktest:
                     color=color_palette['primary'], 
                     y=0.98)
         
-        # More sophisticated grid layout
-        gs = GridSpec(3, 2, figure=fig, wspace=0.15, hspace=0.2)
+        gs = GridSpec(3, 2, figure=fig, wspace=0.1, hspace=0.2)
         
-        # Filter data from a specific start date
-        start_date = "2021-11-01"
-        self.portfolio_equity_curve = self.portfolio_equity_curve.loc[self.portfolio_equity_curve.index >= start_date]
-        self.portfolio_cum_returns = self.portfolio_cum_returns.loc[self.portfolio_cum_returns.index >= start_date]
-        self.portfolio_daily_returns = self.portfolio_daily_returns.loc[self.portfolio_daily_returns.index >= start_date]
-        
-        # Sophisticated Equity Curve with Drawdown
+        # Equity Curve with Drawdown
         ax1 = fig.add_subplot(gs[0, :])
         ax1.plot(self.portfolio_equity_curve.index, self.portfolio_equity_curve, 
-                color=color_palette['equity'], linewidth=3, label='Equity Curve')
+                color=color_palette['primary'], linewidth=3, label='Equity Curve')
         
         # Refined Drawdown Overlay
         cum_returns = self.portfolio_cum_returns
@@ -1217,43 +1255,65 @@ class PortfolioBacktest:
         box_positions, box_data = [], []
         
         for i, (pair, data) in enumerate(self.pair_results.items()):
-            if 'equity_curve' in data:
-                data['equity_curve'] = data['equity_curve'].loc[data['equity_curve'].index >= start_date]
-                ax_equity.plot(data['equity_curve'].index, data['equity_curve'], 
-                            label=pair, linewidth=2, alpha=0.7)
-            
-            if 'daily_returns' in data:
-                returns = data['daily_returns'].dropna()
-                returns = returns.loc[returns.index >= start_date]
-                box_data.append(returns)
-                box_positions.append(i + 1)
+            print(f"Processing pair: {pair}")
+
+            if pair in portfolio_df:  # Use portfolio_df instead
+                equity_data = portfolio_df[pair].cumsum()  # Convert daily returns to cumulative sum
+
+                # Only plot if there is variation
+                if len(equity_data) > 1 and equity_data.nunique() > 1:
+                    try:
+                        ax_equity.plot(equity_data.index, equity_data, 
+                                    label=pair, linewidth=2, alpha=0.7)
+                    except Exception as e:
+                        print(f"  - Error plotting {pair} equity curve: {e}")
+                else:
+                    print(f"  - Skipping plot for {pair} - insufficient variation in data")
+            else:
+                print(f"  - No data for {pair} in portfolio_df")
         
         ax_equity.set_title('Pairwise Equity Curves', 
                             fontsize=14, 
                             color=color_palette['primary'], 
                             fontweight='bold')
-        ax_equity.legend(loc='best')
+        
+        # Only set legend if we have data
+        if len(ax_equity.get_lines()) > 0:
+            ax_equity.legend(loc='best')
+        else:
+            print("No data for pairwise equity curves")
+            
         ax_equity.grid(True, linestyle='--', linewidth=0.5, color=color_palette['grid'])
         
-        # Enhanced Box Plot
-        box_props = dict(linestyle='-', linewidth=1.5, color=color_palette['secondary'])
-        ax_box.boxplot(box_data, positions=box_positions, widths=0.5, 
-                    patch_artist=True, boxprops=box_props)
-        ax_box.set_xticks(box_positions)
-        ax_box.set_xticklabels([pair for pair in self.pair_results.keys()], 
-                                rotation=45, ha='right')
-        ax_box.set_title('Pairwise Returns Distribution', 
-                        fontsize=14, 
-                        color=color_palette['primary'], 
-                        fontweight='bold')
-        ax_box.grid(True, linestyle='--', linewidth=0.5, color=color_palette['grid'])
+        # Box Plot - only if we have data
+        if box_data and box_positions:
+            box_props = dict(linestyle='-', linewidth=1.5, color=color_palette['secondary'])
+            ax_box.boxplot(box_data, positions=box_positions, widths=0.5, 
+                        patch_artist=True, boxprops=box_props)
+            ax_box.set_xticks(box_positions)
+            ax_box.set_xticklabels([pair for pair in self.pair_results.keys()], 
+                                    rotation=45, ha='right')
+            ax_box.set_title('Pairwise Returns Distribution', 
+                            fontsize=14, 
+                            color=color_palette['primary'], 
+                            fontweight='bold')
+            ax_box.grid(True, linestyle='--', linewidth=0.5, color=color_palette['grid'])
+        else:
+            print("No data for box plot")
+            ax_box.set_title('No Data for Returns Distribution', 
+                            fontsize=14, 
+                            color=color_palette['primary'], 
+                            fontweight='bold')
         
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        
+        print("Saving visualization...")
         plt.savefig('Portfolio/Portfolio_Performance_Visualization.png', 
                     dpi=300, 
                     bbox_inches='tight', 
                     facecolor=color_palette['background'])
         
+        print("Visualization complete")
         return fig
 
         

@@ -69,7 +69,7 @@ class Combiner:
     def __init__(self):
         self.period = 3
         self.SR = 1.0 # Sharpe Ratio
-        self.Rf = 0.02 / 252 # Daily risk free rate (assuming 2% annual rate)
+        self.Rf = 0 # 0.02 / 252 # Daily risk free rate (assuming 2% annual rate)
     
     def Combine_models(self, base_result: pd.DataFrame, final_df: pd.DataFrame) -> pd.DataFrame:
         '''Combining the results of the base and neural network models'''

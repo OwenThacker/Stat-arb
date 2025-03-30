@@ -36,7 +36,7 @@ class FeatureImportance:
         self.dropped_features = []
         self.period = 3 # N - Prediction Horizon
         self.SR = 1.0 # SF - Sharpe Ratio
-        self.RF = 0.02 / 252 # RF - Risk Free Rate (daily, assumed 2% annual)
+        self.RF = 0 # 0.02 / 252 # RF - Risk Free Rate (daily, assumed 2% annual)
     
     def get_feature_importance_data(self):
         """

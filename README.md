@@ -1,0 +1,48 @@
+Statistical Arbitrage Trading Strategy
+
+Overview:
+
+This project uses a statistical arbitrage trading strategy by identifying cointegrated asset pairs, applying feature selection, 
+and daul pipeline machine learning model with metelabelling for refined entry positioning. The project integrates clustering, 
+logistic regression, LSTMs, and a custom kelly criterion volatility-based position sizing to optimize trade execution and risk-adjusted returns.
+
+Features & Methodology:
+
+Pairs Selection: Applied DBSCAN and OPTICS clustering to identify cointegrated asset pairs.
+Feature Selection: Conducted multicollinearity testing (VIF) and utilized XGBoost feature importance for optimal input selection.
+Meta-Labelling: Designed a dual-model pipeline where a logistic classifier generates initial trade signals, which are then meta-labelled and 
+refined by an LSTM model.
+Trade Calibration: Implemented Platt scaling to calibrate probabilistic trade outputs for improved execution reliability.
+Bias Mitigation: Used purged K-fold cross-validation to eliminate look-ahead bias and ensure robust out-of-sample validation.
+Volatility Sizing: Developed a custom Kelly Criterion position-sizing model that dynamically adjusts trade exposure based on market conditions.
+Performance Metrics: Achieved an annualized return of 13.3%, a maximum drawdown of 4.48%, and a Sharpe ratio of 1.20.
+Research Foundation: Integrated methodologies from academic papers, proprietary research, and frameworks from Marcos López de Prado and Hudson & Thames.
+Tech Stack
+Programming Language: Python
+Libraries: Pandas, NumPy, Scikit-Learn, XGBoost, TensorFlow, ML techniques, etc
+
+Modifying Results:
+
+1. Modify the rolling spread calculation in StatArb.
+2. Modify the parameters that go into the target labelling. (self.period, self.SR, self.RF). These are found in:
+Labelling.py, Feature_Importance.py & ML-Models.py.
+3. Modify the parameters in Backtest.py. Most are found in __init__, however, make sure to modify z_score_volatility in the kelly criterion method.
+Optional: 4, Can modify the kelly weighting (weight_kelly) in the kelly criterion method in Backtest.py
+Optional: 5. Can also modify the pair selection ML method in PairSelection.py. (DBSCAN or Optics)
+Optional: 6. Can modify the stop loss and take profit criteria (based on cumualtive return or z_score movement) in Backtest.py.
+Optional: 7. Can modify the filter for trading in Backtest.py (long_condition & short_condition)
+
+Running the Code:
+
+To run the code simply run StatArb.py
+
+Future Improvements:
+
+Enhance meta-labelling by incorporating additional ML models for signal validation.
+Implement more meaningfull features that have more predictive power.
+Expand the number of assets for more diverse pairs selection.
+Lower the data frequency for more trading opportunities (intraday) to reduce effect noise in the strategy.
+
+Author
+
+Owen Thacker

@@ -1,48 +1,137 @@
-Statistical Arbitrage Trading Strategy
+# 📈 Statistical Arbitrage Trading Strategy
 
-Overview:
+![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
+![License](https://img.shields.io/badge/License-MIT-green.svg)
+![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)
 
-This project uses a statistical arbitrage trading strategy by identifying cointegrated asset pairs, applying feature selection, 
-and daul pipeline machine learning model with metelabelling for refined entry positioning. The project integrates clustering, 
-logistic regression, LSTMs, and a custom kelly criterion volatility-based position sizing to optimize trade execution and risk-adjusted returns.
+---
 
-Features & Methodology:
+## Overview  
+A **machine learning-driven statistical arbitrage system** that identifies **cointegrated asset pairs** and executes trades using **dual-pipeline models with meta-labelling** for enhanced signal accuracy.  
+The strategy is **market-neutral**, uses **advanced risk management**, and is designed for **scalable deployment**.
 
-Pairs Selection: Applied DBSCAN and OPTICS clustering to identify cointegrated asset pairs.
-Feature Selection: Conducted multicollinearity testing (VIF) and utilized XGBoost feature importance for optimal input selection.
-Meta-Labelling: Designed a dual-model pipeline where a logistic classifier generates initial trade signals, which are then meta-labelled and 
-refined by an LSTM model.
-Trade Calibration: Implemented Platt scaling to calibrate probabilistic trade outputs for improved execution reliability.
-Bias Mitigation: Used purged K-fold cross-validation to eliminate look-ahead bias and ensure robust out-of-sample validation.
-Volatility Sizing: Developed a custom Kelly Criterion position-sizing model that dynamically adjusts trade exposure based on market conditions.
-Performance Metrics: Achieved an annualized return of 13.3%, a maximum drawdown of 4.48%, and a Sharpe ratio of 1.20.
-Research Foundation: Integrated methodologies from academic papers, proprietary research, and frameworks from Marcos López de Prado and Hudson & Thames.
-Tech Stack
-Programming Language: Python
-Libraries: Pandas, NumPy, Scikit-Learn, XGBoost, TensorFlow, ML techniques, etc
+---
 
-Modifying Results:
+## Quick Start
 
-1. Modify the rolling spread calculation in StatArb.
-2. Modify the parameters that go into the target labelling. (self.period, self.SR, self.RF). These are found in:
-Labelling.py, Feature_Importance.py & ML-Models.py.
-3. Modify the parameters in Backtest.py. Most are found in __init__, however, make sure to modify z_score_volatility in the kelly criterion method.
-Optional: 4, Can modify the kelly weighting (weight_kelly) in the kelly criterion method in Backtest.py
-Optional: 5. Can also modify the pair selection ML method in PairSelection.py. (DBSCAN or Optics)
-Optional: 6. Can modify the stop loss and take profit criteria (based on cumualtive return or z_score movement) in Backtest.py.
-Optional: 7. Can modify the filter for trading in Backtest.py (long_condition & short_condition)
+```bash
+# Clone the repository
+git clone <repository-url>
+cd statistical-arbitrage
 
-Running the Code:
+# Install dependencies
+pip install -r requirements.txt
 
-To run the code simply run StatArb.py
+# Run the strategy
+python StatArb.py
 
-Future Improvements:
+## Performance Metrics
 
-Enhance meta-labelling by incorporating additional ML models for signal validation.
-Implement more meaningfull features that have more predictive power.
-Expand the number of assets for more diverse pairs selection.
-Lower the data frequency for more trading opportunities (intraday) to reduce effect noise in the strategy.
+| Metric             | Value          |
+|--------------------|----------------|
+| Annualized Return  | 13.3%          |
+| Sharpe Ratio       | 1.20           |
+| Max Drawdown       | 4.48%          |
+| Strategy Type      | Market-Neutral |
 
-Author
+```markdown
+![Portfolio Performance](Portfolio/Portfolio_Performance_Visualization.png)
 
-Owen Thacker
+## Architecture & Methodology
+**Pairs Selection**
+DBSCAN & OPTICS clustering to identify cointegrated asset pairs
+
+Statistical testing for cointegration relationships
+
+Dynamic pair correlation analysis
+
+**Feature Engineering & Selection**
+Multicollinearity testing using Variance Inflation Factor (VIF)
+
+XGBoost feature importance ranking for optimal input selection
+
+Rolling window feature calculations for time-series stability
+
+**Dual-Pipeline ML Models**
+Primary Signal Generation: Logistic regression classifier for initial trade signals
+
+Meta-Labelling Refinement: LSTM model validates and refines signals from the primary classifier
+
+Probability Calibration with Platt scaling for reliable probabilistic outputs
+
+**Risk Management & Position Sizing**
+Custom Kelly Criterion: Volatility-adjusted position sizing based on market conditions
+
+Purged K-Fold Cross-Validation to eliminate look-ahead bias
+
+Dynamic stop-loss and take-profit: Adaptive risk controls based on z-score movements
+
+## Tech Stack
+Component	Technology
+Language	Python 3.8+
+ML/Data	scikit-learn, XGBoost, TensorFlow
+Analysis	pandas, NumPy, scipy
+Visualization	matplotlib, seaborn
+Research Frameworks	Hudson & Thames, Marcos López de Prado
+
+## Project Structure
+```bash
+Copy
+Edit
+statistical-arbitrage/
+├── StatArb.py                                   # Main execution script
+├── Pair_Identification/PairSelection.py         # Clustering & cointegration testing
+├── Features/Labelling.py                        # Target labelling methodology
+├── Features/Feature_Importance.py               # Feature selection & VIF testing
+├── ML_Models.py                                 # Dual-pipeline model implementation
+├── ML_Model_Trainer.py                          # Training models
+├── Backtest.py                                  # Strategy backtesting & performance
+├── Portfolio/                                   # Performance visualizations
+├── Data/data_fetch.py                           # Fetch and Process data from CSV
+└── requirements.txt                             # Project dependencies
+
+## Configuration & Customization
+Core Parameters
+Modify these to adjust strategy behaviour:
+
+# StatArb.py - Rolling spread window
+rolling_window = 30
+
+# Labelling.py, Feature_Importance.py, ML-Models.py - Target labelling
+self.period = 10    # Labelling period
+self.SR = 0.02      # Sharpe ratio threshold  
+self.RF = 0.01      # Risk-free rate
+
+# Backtest.py - Risk management
+z_score_volatility = 2.0    # Kelly criterion volatility threshold
+weight_kelly = 0.5          # Kelly position weight multiplier
+Advanced Customization
+Switch clustering method (DBSCAN/OPTICS) in PairSelection.py
+
+Modify stop-loss / take-profit based on cumulative return or z-score in Backtest.py
+
+Adjust long_condition & short_condition filters in Backtest.py
+
+## Research Foundation
+This implementation draws from:
+
+Advances in Financial Machine Learning by Marcos López de Prado
+
+Hudson & Thames quantitative research frameworks
+
+Academic literature on statistical arbitrage and meta-labelling
+
+Proprietary research on volatility-based position sizing
+
+## Future Roadmap
+Enhanced project structure with intuitive modules
+
+Advanced meta-labelling with ensemble models
+
+More predictive feature engineering
+
+Expanding asset universe for diverse pairs
+
+Intraday implementation with higher frequency data
+
+Real-time deployment and risk monitoring

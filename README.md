@@ -30,36 +30,37 @@ python StatArb.py
 
 | Metric             | Value          |
 |--------------------|----------------|
-| Annualized Return  | 13.3%          |
-| Sharpe Ratio       | 1.20           |
-| Max Drawdown       | 4.48%          |
+| Annualized Return  | 1.24%          |
+| Sharpe Ratio       | 1.60           |
+| Max Drawdown       | -0.75%         |
+| Win Rate           | 51.86%         |
 | Strategy Type      | Market-Neutral |
 
 ![Portfolio Performance](Portfolio/Portfolio_Performance_Visualization.png)
 
 ## Architecture & Methodology
-**Pairs Selection**
+**Pairs Selection**__
 DBSCAN & OPTICS clustering to identify cointegrated asset pairs
 
 Statistical testing for cointegration relationships
 
 Dynamic pair correlation analysis
 
-**Feature Engineering & Selection**
+**Feature Engineering & Selection**__
 Multicollinearity testing using Variance Inflation Factor (VIF)
 
 XGBoost feature importance ranking for optimal input selection
 
 Rolling window feature calculations for time-series stability
 
-**Dual-Pipeline ML Models**
+**Dual-Pipeline ML Models**__
 Primary Signal Generation: Logistic regression classifier for initial trade signals
 
 Meta-Labelling Refinement: LSTM model validates and refines signals from the primary classifier
 
 Probability Calibration with Platt scaling for reliable probabilistic outputs
 
-**Risk Management & Position Sizing**
+**Risk Management & Position Sizing**__
 Custom Kelly Criterion: Volatility-adjusted position sizing based on market conditions
 
 Purged K-Fold Cross-Validation to eliminate look-ahead bias
@@ -99,14 +100,14 @@ Modify these to adjust strategy behaviour:
 rolling_window = 30
 
 # Labelling.py, Feature_Importance.py, ML-Models.py - Target labelling
-self.period = 10    # Labelling period
-self.SR = 0.02      # Sharpe ratio threshold  
+self.period = 10    # Labelling period__
+self.SR = 0.02      # Sharpe ratio threshold__  
 self.RF = 0.01      # Risk-free rate
 
 # Backtest.py - Risk management
-z_score_volatility = 2.0    # Kelly criterion volatility threshold
-weight_kelly = 0.5          # Kelly position weight multiplier
-Advanced Customization
+z_score_volatility = 2.0    # Kelly criterion volatility threshold__
+weight_kelly = 0.5          # Kelly position weight multiplier__
+Advanced Customization__
 Switch clustering method (DBSCAN/OPTICS) in PairSelection.py
 
 Modify stop-loss / take-profit based on cumulative return or z-score in Backtest.py

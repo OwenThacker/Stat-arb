@@ -128,14 +128,14 @@ Real-time deployment and risk monitoring
 
 ## EDA
 
-![EDA Example](EDA/ABN_NA_Equity_BPSO_IM_Equity_EDA.png)
+![EDA Example](plots/EDA/ABN_NA_Equity_BPSO_IM_Equity_EDA.png)
 
 ## Pair Plot
 
-![Pair Plot](tsne_visualization.png)
+![Pair Plot](plots/Pair_Plot/tsne_visualization.png)
 
 ## Feature Importance
 
-![Feature Importance](ACA_FP_Equity_BBVA_SQ_Equity_feature_importance.png)
+![Feature Importance](plots/Feature_Importance/ACA_FP_Equity_BBVA_SQ_Equity_feature_importance.png)
 
-![Feature Pair Plot](ACA_FP_Equity_BBVA_SQ_Equity_pairplot.png)
+![Feature Pair Plot](plots/Feature_Importance/ACA_FP_Equity_BBVA_SQ_Equity_pairplot.png)

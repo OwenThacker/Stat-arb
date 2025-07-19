@@ -77,8 +77,6 @@ Dynamic stop-loss and take-profit: Adaptive risk controls based on z-score movem
 
 ## Project Structure
 ```bash
-Copy
-Edit
 statistical-arbitrage/
 ├── StatArb.py                                   # Main execution script
 ├── Pair_Identification/PairSelection.py         # Clustering & cointegration testing

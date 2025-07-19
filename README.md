@@ -92,29 +92,15 @@ statistical-arbitrage/
 └── requirements.txt                             # Project dependencies
 ```
 
-## Configuration & Customization
-Core Parameters
-Modify these to adjust strategy behaviour:
+## Modifying Results:
 
-# StatArb.py - Rolling spread window
-rolling_window = 30
-
-# Labelling.py, Feature_Importance.py, ML-Models.py - Target labelling
-self.period = 10    # Labelling period <br />
-self.SR = 0.02      # Sharpe ratio threshold 
-self.RF = 0.01      # Risk-free rate
-
-# Backtest.py - Risk management
-z_score_volatility = 2.0    # Kelly criterion volatility threshold <br />
-weight_kelly = 0.5          # Kelly position weight multiplier <br />
-
-Advanced Customization <br />
-
-Switch clustering method (DBSCAN/OPTICS) in PairSelection.py
-
-Modify stop-loss / take-profit based on cumulative return or z-score in Backtest.py
-
-Adjust long_condition & short_condition filters in Backtest.py
+1. Modify the rolling spread calculation in StatArb.
+2. Modify the parameters that go into the target labelling. (self.period, self.SR, self.RF). These are found in: Labelling.py, Feature_Importance.py & ML-Models.py.
+3. Modify the parameters in Backtest.py. Most are found in init, however, make sure to modify z_score_volatility in the kelly criterion method. 
+4. Can modify the kelly weighting (weight_kelly) in the kelly criterion method in Backtest.py 
+5. Can also modify the pair selection ML method in PairSelection.py. (DBSCAN or Optics) 
+6. Can modify the stop loss and take profit criteria (based on cumualtive return or z_score movement) in Backtest.py. 
+7. Can modify the filter for trading in Backtest.py (long_condition & short_condition)
 
 ## Research Foundation
 This implementation draws from:
@@ -139,3 +125,11 @@ Expanding asset universe for diverse pairs
 Intraday implementation with higher frequency data
 
 Real-time deployment and risk monitoring
+
+## EDA
+
+![EDA Example](EDA/ABN_NA_Equity_BPSO_IM_Equity_EDA.png)
+
+## Example Pair Results
+
+![DNB - FH](Results/DNB NO Equity_NDA FH Equity_tearsheet.png)

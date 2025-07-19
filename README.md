@@ -39,28 +39,28 @@ python StatArb.py
 ![Portfolio Performance](Portfolio/Portfolio_Performance_Visualization.png)
 
 ## Architecture & Methodology
-**Pairs Selection**__
+**Pairs Selection** <br />
 DBSCAN & OPTICS clustering to identify cointegrated asset pairs
 
 Statistical testing for cointegration relationships
 
 Dynamic pair correlation analysis
 
-**Feature Engineering & Selection**__
+**Feature Engineering & Selection** <br />
 Multicollinearity testing using Variance Inflation Factor (VIF)
 
 XGBoost feature importance ranking for optimal input selection
 
 Rolling window feature calculations for time-series stability
 
-**Dual-Pipeline ML Models**__
+**Dual-Pipeline ML Models** <br />
 Primary Signal Generation: Logistic regression classifier for initial trade signals
 
 Meta-Labelling Refinement: LSTM model validates and refines signals from the primary classifier
 
 Probability Calibration with Platt scaling for reliable probabilistic outputs
 
-**Risk Management & Position Sizing**__
+**Risk Management & Position Sizing** <br />
 Custom Kelly Criterion: Volatility-adjusted position sizing based on market conditions
 
 Purged K-Fold Cross-Validation to eliminate look-ahead bias
@@ -68,12 +68,12 @@ Purged K-Fold Cross-Validation to eliminate look-ahead bias
 Dynamic stop-loss and take-profit: Adaptive risk controls based on z-score movements
 
 ## Tech Stack
-Component	Technology
-Language	Python 3.8+
-ML/Data	scikit-learn, XGBoost, TensorFlow
-Analysis	pandas, NumPy, scipy
-Visualization	matplotlib, seaborn
-Research Frameworks	Hudson & Thames, Marcos López de Prado
+Component	Technology <br />
+Language	Python 3.8+ <br />
+ML/Data	scikit-learn, XGBoost, TensorFlow <br />
+Analysis	pandas, NumPy, scipy <br />
+Visualization	matplotlib, seaborn <br />
+Research Frameworks	Hudson & Thames, Marcos López de Prado <br />
 
 ## Project Structure
 ```bash
@@ -100,14 +100,14 @@ Modify these to adjust strategy behaviour:
 rolling_window = 30
 
 # Labelling.py, Feature_Importance.py, ML-Models.py - Target labelling
-self.period = 10    # Labelling period__
-self.SR = 0.02      # Sharpe ratio threshold__  
+self.period = 10    # Labelling period <br />
+self.SR = 0.02      # Sharpe ratio threshold <br />  
 self.RF = 0.01      # Risk-free rate
 
 # Backtest.py - Risk management
-z_score_volatility = 2.0    # Kelly criterion volatility threshold__
-weight_kelly = 0.5          # Kelly position weight multiplier__
-Advanced Customization__
+z_score_volatility = 2.0    # Kelly criterion volatility threshold <br />
+weight_kelly = 0.5          # Kelly position weight multiplier <br />
+Advanced Customization <br />
 Switch clustering method (DBSCAN/OPTICS) in PairSelection.py
 
 Modify stop-loss / take-profit based on cumulative return or z-score in Backtest.py

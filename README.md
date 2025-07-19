@@ -24,6 +24,7 @@ pip install -r requirements.txt
 
 # Run the strategy
 python StatArb.py
+```
 
 ## Performance Metrics
 
@@ -34,7 +35,6 @@ python StatArb.py
 | Max Drawdown       | 4.48%          |
 | Strategy Type      | Market-Neutral |
 
-```markdown
 ![Portfolio Performance](Portfolio/Portfolio_Performance_Visualization.png)
 
 ## Architecture & Methodology
@@ -89,6 +89,7 @@ statistical-arbitrage/
 ├── Portfolio/                                   # Performance visualizations
 ├── Data/data_fetch.py                           # Fetch and Process data from CSV
 └── requirements.txt                             # Project dependencies
+```
 
 ## Configuration & Customization
 Core Parameters

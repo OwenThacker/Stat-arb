@@ -13,6 +13,63 @@ import io
 from datetime import datetime
 
 class Backtest:
+
+    """
+    Pairs trading backtest engine with Kelly criterion position sizing.
+    
+    This class implements a mean-reversion pairs trading strategy with dynamic position sizing,
+    risk management through stop-loss and take-profit levels, and detailed performance analytics.
+    The strategy uses z-score based signals filtered through mean reversion conditions and 
+    applies the Kelly criterion for optimal position sizing.
+    
+    Key Features:
+    - Kelly criterion position sizing with risk-adjusted scaling
+    - Dynamic stop-loss and take-profit levels based on volatility
+    - Maximum holding period constraints
+    - Concurrent position management with portfolio-level risk controls
+    - Comprehensive performance metrics and visualization
+    - Transaction cost modeling
+    
+    Attributes:
+        stock1 (str): Symbol for the first stock in the pair
+        stock2 (str): Symbol for the second stock in the pair  
+        data (pd.DataFrame): Historical price data for both stocks
+        final_df (pd.DataFrame): Processed dataframe with prediction scores
+        z_score (pd.Series): Z-score time series for mean reversion signals
+        returns (pd.DataFrame): Daily returns for both stocks
+        cum_returns (pd.Series): Cumulative strategy returns
+        daily_returns (pd.Series): Daily strategy returns
+        strategy_returns (pd.Series): Raw strategy returns before compounding
+        position_sizes (pd.Series): Time series of total position sizes
+        trades (pd.Series): Time series of trade signals
+        metrics (dict): Performance metrics dictionary
+        completed_trades (list): List of completed trade records
+        
+    Risk Management Parameters:
+        base_stop_loss_scale (float): Base stop loss as fraction of entry (default: 0.001)
+        risk_reward_ratio (float): Take profit to stop loss ratio (default: 1.3)
+        max_holding (int): Maximum holding period in days (default: 7)
+        
+    Position Sizing Parameters:
+        min_position_size (float): Minimum position size (default: 0.1)
+        max_position_size (float): Maximum position size (default: 2.5)  
+        max_concurrent_positions (int): Maximum number of concurrent positions (default: 50)
+        first_position_size (float): Size for first position (default: 0.50)
+        position_scaling_factor (float): Risk scaling factor (default: 1.0)
+        
+    Transaction Costs:
+        transaction_cost_fixed (float): Fixed cost per trade (default: 0.0)
+        transaction_cost_percentage (float): Percentage cost per trade (default: 0.001)
+        
+    Volatility Parameters:
+        z_volatility_window (int): Window for z-score volatility calculation (default: 2)
+        volatility_factor (float): Volatility adjustment factor for stop loss (default: 0)
+        
+    Trailing Stop Parameters:
+        trailing_stop_loss (bool): Enable trailing stop loss (default: False)
+        trailing_threshold (float): Trailing stop threshold (default: 0.20)
+    """
+
     def __init__(self, stock1, stock2, data, final_df, normalized_df, combined_final, returns):
         self.stock1 = stock1
         self.stock2 = stock2
@@ -412,35 +469,36 @@ class Backtest:
         # for direction, positions in positions_by_direction.items():
         #     self.direction_positions[direction] = len(positions)
 
-
     def calculate_rolling_metrics(self):
-        """Calculate rolling performance metrics."""
-        # Calculating rolling returns
+        """Calculate rolling performance metrics with updated Sharpe ratio calculation."""
+        
         rolling_returns = pd.DataFrame(index=self.daily_returns.index)
         rolling_returns['1D'] = self.daily_returns
         rolling_returns['5D'] = self.daily_returns.rolling(window=5).sum()
         rolling_returns['10D'] = self.daily_returns.rolling(window=10).sum()
         rolling_returns['20D'] = self.daily_returns.rolling(window=20).sum()
         rolling_returns['60D'] = self.daily_returns.rolling(window=60).sum()
-        
-        # Calculating rolling volatility
+
+        # Custom rolling volatility calculation
         rolling_volatility = pd.DataFrame(index=self.daily_returns.index)
-        rolling_volatility['10D'] = self.daily_returns.rolling(window=10).std() * np.sqrt(252)
-        rolling_volatility['20D'] = self.daily_returns.rolling(window=20).std() * np.sqrt(252)
-        rolling_volatility['60D'] = self.daily_returns.rolling(window=60).std() * np.sqrt(252)
-        
-        # Calculating rolling Sharpe ratio (assuming 0% risk-free rate)
+        for window in [10, 20, 60]:
+            rolling_mean = self.daily_returns.rolling(window=window).mean()
+            rolling_var = ((self.daily_returns - rolling_mean) ** 2).rolling(window=window).mean()
+            rolling_volatility[f'{window}D'] = rolling_var
+
+        # Updated rolling Sharpe ratio calculation
         rolling_sharpe = pd.DataFrame(index=self.daily_returns.index)
-        rolling_sharpe['10D'] = (self.daily_returns.rolling(window=10).mean() * 252) / (self.daily_returns.rolling(window=10).std() * np.sqrt(252))
-        rolling_sharpe['20D'] = (self.daily_returns.rolling(window=20).mean() * 252) / (self.daily_returns.rolling(window=20).std() * np.sqrt(252))
-        rolling_sharpe['60D'] = (self.daily_returns.rolling(window=60).mean() * 252) / (self.daily_returns.rolling(window=60).std() * np.sqrt(252))
-        
-        # Calculating drawdowns
+        for window in [10, 20, 60]:
+            avg_return = self.daily_returns.rolling(window=window).mean()
+            vol = rolling_volatility[f'{window}D']
+            rolling_sharpe[f'{window}D'] = (avg_return / vol) * np.sqrt(252)
+
+        # Rolling drawdown calculation
         rolling_drawdown = pd.DataFrame(index=self.daily_returns.index)
         cum_returns = (1 + self.daily_returns).cumprod()
         rolling_max = cum_returns.rolling(window=252, min_periods=1).max()
         rolling_drawdown['252D'] = (cum_returns / rolling_max) - 1
-        
+
         # Store the calculated metrics
         self.rolling_metrics = {
             'returns': rolling_returns,
@@ -448,29 +506,34 @@ class Backtest:
             'sharpe': rolling_sharpe,
             'drawdown': rolling_drawdown
         }
-    
+
     def calculate_metrics(self):
-        """Calculate and store performance metrics."""
-        # Calculate total return
+        """Calculate and store performance metrics using the updated Sharpe ratio formula."""
+        
         if len(self.cum_returns) > 0:
             total_return = self.cum_returns.iloc[-1]
         else:
             total_return = 0.0
 
-        # Calculate annualized return
         if len(self.daily_returns) > 0:
             days = len(self.daily_returns)
             annualized_return = ((1 + total_return) ** (252 / days)) - 1
         else:
             annualized_return = 0.0
 
-        # Calculate Sharpe ratio (assuming 0% risk-free rate)
-        if len(self.daily_returns) > 0 and self.daily_returns.std() > 0:
-            sharpe_ratio = annualized_return / (self.daily_returns.std() * np.sqrt(252))
+        # Updated Sharpe ratio calculation
+        if len(self.daily_returns) > 0:
+            avg_daily_return = self.daily_returns.mean()
+            daily_volatility = np.sqrt(((self.daily_returns - avg_daily_return) ** 2).mean())
+            
+            if daily_volatility > 0:
+                sharpe_ratio = (avg_daily_return / daily_volatility) * np.sqrt(252)
+            else:
+                sharpe_ratio = 0.0
         else:
             sharpe_ratio = 0.0
 
-        # Calculate maximum drawdown
+        # Maximum drawdown calculation
         if len(self.daily_returns) > 0:
             cum_returns = (1 + self.daily_returns).cumprod()
             max_returns = cum_returns.cummax()
@@ -478,6 +541,11 @@ class Backtest:
             max_drawdown = drawdowns.min()
         else:
             max_drawdown = 0.0
+
+        # Store the updated metrics
+        self.metrics['sharpe_ratio'] = sharpe_ratio
+        self.metrics['max_drawdown'] = max_drawdown
+
 
         # Calculate expectancy and win rate from completed trades
         if self.completed_trades:
@@ -985,6 +1053,25 @@ class Backtest:
 
 
 class PortfolioBacktest:
+
+    """
+    A portfolio backtesting class that aggregates and analyzes 
+    performance across multiple trading pairs.
+    
+    This class combines individual pair backtest results into a unified portfolio
+    analysis, providing portfolio-level performance metrics, visualizations, 
+    and risk analytics. It supports equal weighting strategies and calculates
+    advanced risk-adjusted returns including Sharpe, Sortino, and Calmar ratios.
+    
+    Attributes:
+        pair_results (dict): Dictionary storing backtest results for each trading pair
+        portfolio_daily_returns (pd.Series): Daily returns of the combined portfolio
+        portfolio_cum_returns (pd.Series): Cumulative returns of the portfolio
+        portfolio_equity_curve (pd.Series): Portfolio equity curve over time
+        portfolio_metrics (dict): Dictionary of calculated performance metrics
+        all_trades (list): Consolidated list of all trades across all pairs
+    """
+
     def __init__(self):
         self.pair_results = {}
         self.portfolio_daily_returns = None
@@ -1073,68 +1160,77 @@ class PortfolioBacktest:
         return portfolio_df
     
     def calculate_portfolio_metrics(self):
-        """Calculate performance metrics for the overall portfolio"""
+        """Calculate performance metrics for the overall portfolio with updated Sharpe ratio calculation."""
+        
         if self.portfolio_daily_returns is None:
             print("No portfolio returns calculated yet")
             return
-        
+
         returns = self.portfolio_daily_returns
-        
-        # Annual risk-free rate (e.g., 2%)
-        risk_free_rate = 0.00 / 252  # Daily risk-free rate
-        
+
+        # Annual risk-free rate (e.g., 2% = 0.02) converted to a daily rate
+        risk_free_rate = 0.00 / 252  
+
         # Basic metrics
         self.portfolio_metrics['total_return'] = self.portfolio_cum_returns.iloc[-1]
         self.portfolio_metrics['annualized_return'] = self.portfolio_cum_returns.iloc[-1] / (len(returns) / 252)
-        self.portfolio_metrics['annualized_volatility'] = returns.std() * np.sqrt(252)
-        
-        # Sharpe Ratio - calculate directly from returns
+
+        # Custom volatility calculation
+        avg_daily_return = returns.mean()
+        volatility = np.sqrt(((returns - avg_daily_return) ** 2).mean())  
+
+        self.portfolio_metrics['annualized_volatility'] = volatility * np.sqrt(252)
+
+        # Updated Sharpe Ratio Calculation
         excess_returns = returns - risk_free_rate
-        self.portfolio_metrics['sharpe_ratio'] = (excess_returns.mean() * 252) / (returns.std() * np.sqrt(252))
+        if volatility > 0:
+            self.portfolio_metrics['sharpe_ratio'] = (excess_returns.mean() / volatility) * np.sqrt(252)
+        else:
+            self.portfolio_metrics['sharpe_ratio'] = np.nan  # Avoid division by zero
+
+        # Sortino Ratio - calculate downside deviation first
+        negative_returns = returns[returns < 0]
+        if len(negative_returns) > 0:
+            downside_deviation = np.sqrt(((negative_returns - negative_returns.mean()) ** 2).mean()) * np.sqrt(252)
+            self.portfolio_metrics['sortino_ratio'] = (excess_returns.mean() / downside_deviation) * np.sqrt(252) if downside_deviation > 0 else np.nan
+        else:
+            self.portfolio_metrics['sortino_ratio'] = np.nan
 
         # Drawdown analysis 
-        # Create a wealth index from the daily returns
-        wealth_index = (1 + self.portfolio_daily_returns).cumprod()
-        
-        # Calculate the running maximum
+        wealth_index = (1 + returns).cumprod()
         running_max = wealth_index.cummax()
-        
-        # Calculate the drawdown
         drawdown = (wealth_index / running_max) - 1
-        
-        # This ensures drawdowns are properly calculated and always negative
         self.portfolio_metrics['max_drawdown'] = drawdown.min()
-        
+
         # Calmar ratio: Annualized return / Max drawdown
-        # Avoid division by zero in case max_drawdown is 0
         if abs(self.portfolio_metrics['max_drawdown']) > 0:
             self.portfolio_metrics['calmar_ratio'] = self.portfolio_metrics['annualized_return'] / abs(self.portfolio_metrics['max_drawdown'])
         else:
             self.portfolio_metrics['calmar_ratio'] = np.nan
-        
-        # Win rate for all trades
+
+        # Win rate and trade metrics
         if self.all_trades:
             profitable_trades = sum(1 for trade in self.all_trades if trade['pnl'] > 0)
             self.portfolio_metrics['win_rate'] = profitable_trades / len(self.all_trades)
             self.portfolio_metrics['total_trades'] = len(self.all_trades)
-            
-            # Average trade metrics
             self.portfolio_metrics['avg_trade_return'] = np.mean([trade['return'] for trade in self.all_trades])
             self.portfolio_metrics['avg_trade_pnl'] = np.mean([trade['pnl'] for trade in self.all_trades])
             self.portfolio_metrics['avg_holding_period'] = np.mean([trade['holding_period'] for trade in self.all_trades])
         else:
-            # Set default values if no trades
-            self.portfolio_metrics['win_rate'] = 0
-            self.portfolio_metrics['total_trades'] = 0
-            self.portfolio_metrics['avg_trade_return'] = 0
-            self.portfolio_metrics['avg_trade_pnl'] = 0
-            self.portfolio_metrics['avg_holding_period'] = 0
-            
+            self.portfolio_metrics.update({
+                'win_rate': 0,
+                'total_trades': 0,
+                'avg_trade_return': 0,
+                'avg_trade_pnl': 0,
+                'avg_holding_period': 0
+            })
+
         return self.portfolio_metrics
     
     def visualize_portfolio(self, portfolio_df, figsize=(20, 14)):
         """
         Creates a professional and visually appealing portfolio performance visualization
+        with enhanced performance metrics including Sortino and Calmar ratios
         """
         if self.portfolio_equity_curve is None:
             print("No portfolio data to visualize")
@@ -1176,7 +1272,9 @@ class PortfolioBacktest:
         ax1.plot(self.portfolio_equity_curve.index, self.portfolio_equity_curve, 
                 color=color_palette['primary'], linewidth=3, label='Equity Curve')
         
-        # Refined Drawdown Overlay
+        ax1.legend(loc='upper left', fontsize=12)
+        
+        # Drawdown Overlay
         cum_returns = self.portfolio_cum_returns
         drawdown = (cum_returns - cum_returns.cummax()) / cum_returns.cummax()
         drawdown.fillna(0, inplace=True)
@@ -1191,16 +1289,30 @@ class PortfolioBacktest:
                     fontweight='bold')
         ax1.grid(True, linestyle='--', linewidth=0.5, color=color_palette['grid'])
         
-        # Performance Metrics with Enhanced Styling
+        # Calculate Sortino Ratio if not already in portfolio_metrics
+        if 'sortino_ratio' not in self.portfolio_metrics:
+            # Only consider negative returns for downside deviation
+            negative_returns = self.portfolio_daily_returns[self.portfolio_daily_returns < 0]
+            downside_deviation = negative_returns.std() * np.sqrt(252)
+            
+            # Avoid division by zero
+            if downside_deviation != 0:
+                self.portfolio_metrics['sortino_ratio'] = (self.portfolio_metrics.get('annualized_return', 0) / downside_deviation)
+            else:
+                self.portfolio_metrics['sortino_ratio'] = np.nan
+        
+        # Enhanced Performance Metrics with Sortino and Calmar ratios
         ax_metrics = fig.add_subplot(gs[1, 0])
         metrics_data = [
             ["Performance Metrics", "Value"],
             ["Total Return", f"{self.portfolio_metrics.get('total_return', 0):.2%}"],
             ["Annualized Return", f"{self.portfolio_metrics.get('annualized_return', 0):.2%}"],
+            ["Annualized Volatility", f"{self.portfolio_metrics.get('annualized_volatility', 0):.2%}"],
             ["Sharpe Ratio", f"{self.portfolio_metrics.get('sharpe_ratio', 0):.2f}"],
+            ["Sortino Ratio", f"{self.portfolio_metrics.get('sortino_ratio', 0):.2f}"],
+            ["Calmar Ratio", f"{self.portfolio_metrics.get('calmar_ratio', 0):.2f}"],
             ["Max Drawdown", f"{self.portfolio_metrics.get('max_drawdown', 0):.2%}"],
-            ["Win Rate", f"{self.portfolio_metrics.get('win_rate', 0):.2%}"],
-            ["Average Trade PnL", f"${self.portfolio_metrics.get('avg_trade_pnl', 0):.2f}"]
+            ["Win Rate", f"{self.portfolio_metrics.get('win_rate', 0):.2%}"]
         ]
         
         table = ax_metrics.table(cellText=metrics_data, 
@@ -1287,21 +1399,21 @@ class PortfolioBacktest:
         if box_data and box_positions:
             box_props = dict(linestyle='-', linewidth=1.5, color=color_palette['secondary'])
             ax_box.boxplot(box_data, positions=box_positions, widths=0.5, 
-                           patch_artist=True, boxprops=box_props)
+                        patch_artist=True, boxprops=box_props)
             ax_box.set_xticks(box_positions)
             ax_box.set_xticklabels([pair for pair in self.pair_results.keys()], 
-                                   rotation=45, ha='right')
+                                rotation=45, ha='right')
             ax_box.set_title('Pairwise Daily Returns Distribution', 
-                             fontsize=14, 
-                             color=color_palette['primary'], 
-                             fontweight='bold')
+                            fontsize=14, 
+                            color=color_palette['primary'], 
+                            fontweight='bold')
             ax_box.grid(True, linestyle='--', linewidth=0.5, color=color_palette['grid'])
         else:
             print("No data for box plot")
             ax_box.set_title('No Data for Daily Returns Distribution', 
-                             fontsize=14, 
-                             color=color_palette['primary'], 
-                             fontweight='bold')
+                            fontsize=14, 
+                            color=color_palette['primary'], 
+                            fontweight='bold')
         
         plt.tight_layout(rect=[0, 0.03, 1, 0.95])
         

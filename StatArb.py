@@ -51,6 +51,44 @@ from sklearn.metrics import (
 from scipy.stats import linregress
 
 class StatArb:
+
+    """
+    A class to run the statistical arbitrage strategy. 
+    This class orchestrates the entire process from data loading, pair identification,
+    feature engineering, model training, and backtesting.
+
+    Attributes:
+
+        file_name : str
+            Path to the CSV file containing pricing data.
+        pricing : pd.DataFrame
+            DataFrame holding the raw pricing data after processing.
+        returns : pd.DataFrame
+            DataFrame holding percentage returns computed from pricing data.
+        tickers_list : list
+            List of unique tickers found in the dataset.
+        pairs : list
+            List of tuples containing cointegrated stock pairs.
+        normalized_df : pd.DataFrame
+            DataFrame holding the normalized features for model training.
+
+    Methods:
+
+        load_data(): Loads the data from the specified file and identifies pairs for analysis.
+        pairs_dataframes(): Creates DataFrames for each identified pair with relevant features.
+        get_technical_indicators(pair_df, stock1, stock2): Generates technical indicators for the given pair DataFrame.
+        normalize_features(pairs, globals_dict): Normalizes features for the identified pairs using rolling normalization.
+        feature_importance_analysis(pairs, globals_dict):Computes feature importance for the identified pairs using XGBoost.
+        train_model(pairs, globals_dict): Trains a machine learning model on the normalized features of the pairs.
+        run_base_model(): Runs the base model training and evaluation process.
+        Run_NN(): Runs the neural network model training and evaluation process.
+        Combine_models(): Combines the predictions from multiple models for improved accuracy.
+        run_backtest(): Runs the backtest on the trained model predictions.
+
+
+    """
+
+
     def __init__(self, file_name: str):
         """
         Initialize the StatArb class with the given file name where our data is stored.

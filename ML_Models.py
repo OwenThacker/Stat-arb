@@ -29,6 +29,34 @@ np.random.seed(42)
 random.seed()
 
 class LogisticRegressionClassifier:
+    """
+    A logistic regression-based trading signal classifier for pairs trading strategies.
+    
+    This class implements a machine learning pipeline for generating trading signals based on 
+    z-score normalization and Sharpe ratio-based labeling. It uses Purged K-fold Cross-Validation 
+    to prevent data leakage and optimize for recall performance with a custom threshold.
+    
+    Attributes:
+        df (pd.DataFrame): Normalized dataframe containing trading features and z-scores
+        sequence_length (int): Length of sequences for time series analysis (default: 50)
+        lookback (int): Number of periods to look back for predictions (default: 1)
+        threshold (float): Classification threshold for binary predictions (default: 0.3)
+        model (LogisticRegression): Scikit-learn logistic regression model
+        scaler (MinMaxScaler): Feature scaling transformer
+        purged_k_cv (Purged_K_CV): Custom cross-validation handler for time series
+        dates (array): Preserved date indices for temporal analysis
+        period (int): Prediction horizon in days (default: 3)
+        SR (float): Target Sharpe ratio threshold for labeling (default: 0.5)
+        RF (float): Risk-free rate for Sharpe calculation (default: 0)
+    
+    Methods:
+        prepare_data(): Prepares features and labels using Sharpe ratio-based strategy
+        build_model(): Constructs a balanced logistic regression model
+        calculate_linear_weights(num_samples): Generates time-weighted sample weights
+        evaluate(result): Evaluates model performance with focus on recall metrics
+        run(): Executes the complete training and evaluation pipeline
+    """
+
     def __init__(self, normalized_df, sequence_length=50, lookback=1, threshold=0.3):
         self.df = normalized_df
         self.sequence_length = sequence_length
@@ -39,7 +67,7 @@ class LogisticRegressionClassifier:
         self.purged_k_cv = Purged_K_CV()  
         self.dates = None
         self.period = 3 # N - Prediction Horizon
-        self.SR = 1.0 # SF - Sharpe Ratio
+        self.SR = 0.5 # SF - Sharpe Ratio
         self.RF = 0 # 0.02 / 252 # RF - Risk Free Rate (daily, assumed 2% annual)
 
     def prepare_data(self):
@@ -52,17 +80,21 @@ class LogisticRegressionClassifier:
         SR_target = self.SR
         Rf = self.RF
 
-        # Calculate Log returns, rolling volatility and threshold
+        # Calculate Log returns
         log_returns = np.log(self.df['z_score'] / self.df['z_score'].shift(1)).fillna(0)
-        rolling_vol = log_returns.rolling(window=N).std()
 
-        # Calculate future returns
-        future_return = log_returns.rolling(window=N).sum().shift(-N)
-        future_vol = rolling_vol.shift(-N)  # Align volatility with future return period
+        # Calculate future return: sum of next N returns
+        future_return = log_returns.shift(-N).rolling(window=N).sum()
+
+        # Calculate future volatility: standard deviation over the next N periods
+        future_vol = log_returns.shift(-N).rolling(window=N).std()
+
+        # Avoid division by zero
+        safe_future_vol = future_vol.replace(0, np.nan)
 
         # Calculate expected Sharpe ratio for long and short trades
-        expected_sharpe_long = (future_return - Rf) / future_vol
-        expected_sharpe_short = (-future_return - Rf) / future_vol  # For short positions, return is negative
+        expected_sharpe_long = future_return / safe_future_vol
+        expected_sharpe_short = -future_return / safe_future_vol  # Short trades reverse the sign
 
         # Defining labeling strategy similar to original but using Sharpe comparison
         self.df['label'] = np.where(expected_sharpe_long > SR_target, 1,  # Trade: long when expected Sharpe > target
@@ -192,6 +224,74 @@ class LogisticRegressionClassifier:
 
 
 class Neural_Network:
+
+    """
+    An LSTM-based neural network classifier for advanced trading signal prediction.
+    
+    This class implements a deep learning pipeline combining LSTM architecture
+    with comprehensive feature engineering, regime detection, and probabilistic calibration
+    for pairs trading strategies. It uses Purged K-fold Cross-Validation and advanced
+    regularization techniques to prevent overfitting.
+    
+    Attributes:
+        stock1, stock2 (str): Trading pair identifiers
+        returns (array): Return series for the trading pair
+        df (pd.DataFrame): Normalized dataframe with trading features
+        sequence_length (int): LSTM sequence length (default: 50)
+        lookback (int): Prediction lookback period (default: 1)
+        batch_size (int): Training batch size (default: 32)
+        epochs (int): Maximum training epochs (default: 100)
+        learning_rate (float): Model learning rate (default: 0.001)
+        dropout_rate (float): Dropout regularization rate (default: 0.2)
+        scaler (RobustScaler): Feature scaling transformer
+        purged_k_cv (Purged_K_CV): Time series cross-validation handler
+        dates (array): Preserved temporal indices
+        threshold (float): Binary classification threshold (default: 0.5)
+        period (int): Prediction horizon in days (default: 3)
+        SR (float): Target Sharpe ratio for labeling (default: 0.5)
+        RF (float): Risk-free rate (default: 0)
+        platt_scaler (LogisticRegression): Probability calibration model
+        model (keras.Model): Compiled LSTM neural network
+    
+    Methods:
+        prepare_data(): Comprehensive data preparation with advanced feature engineering
+        create_sequences(features, target, dates): Creates LSTM-compatible sequences
+        Additional_Features(z_score): Generates 100+ technical and statistical features
+        normalize_features(features_df): Applies rolling window normalization
+        build_model(): Constructs regularized LSTM with temperature scaling
+        calculate_exponential_weights(num_samples): Generates exponential time weights
+        evaluate(data, normalized_df): Comprehensive model evaluation with AUC metrics
+        plot_calibration_curve(final_df, n_bins, save_path): Plots reliability curves
+        run(): Executes complete training pipeline with advanced callbacks
+    
+    Feature Engineering:
+        - Multi-window statistical measures (mean, std, skew, kurtosis)
+        - Velocity and acceleration indicators
+        - Momentum and trend calculations
+        - Distance from moving averages (normalized)
+        - CUSUM regime change detection
+        - Extreme value indicators
+        - Exponential moving averages
+        - Rolling normalization with 252-day windows
+    
+    Model Architecture:
+        - Gaussian noise input layer for regularization
+        - Dual LSTM layers (128, 64 units) with tanh activation
+        - Batch normalization and dropout (0.4) between layers
+        - Dense layers with LeakyReLU activation
+        - Temperature scaling for aggressive probability predictions
+        - Binary cross-entropy loss with class balancing
+    
+    Advanced Features:
+        - Purged K-fold CV prevents temporal data leakage
+        - Exponential sample weighting emphasizes recent observations
+        - Temperature scaling pushes predictions toward extremes (0 or 1)
+        - Early stopping and learning rate reduction callbacks
+        - Comprehensive evaluation metrics (AUC-ROC, Average Precision)
+        - Calibration curve plotting for probability assessment
+
+    """
+     
     def __init__(self, stock1, stock2, returns, normalized_df, sequence_length=50, lookback=1,  
                  batch_size=32, epochs=100, learning_rate=0.001, dropout_rate=0.2):
         self.stock1 = stock1
@@ -209,7 +309,7 @@ class Neural_Network:
         self.dates = None
         self.threshold = 0.5  # For precision classification scoring of second model
         self.period = 3 # N - Prediction Horizon
-        self.SR = 1.0 # SF - Sharpe Ratio
+        self.SR = 0.5 # SF - Sharpe Ratio
         self.RF = 0 # 0.02 / 252 # RF - Risk Free Rate (daily, assumed 2% annual)
         self.platt_scaler = LogisticRegression()  # Logistic Regression for Platt Scaling
         self.model = self.build_model()  # Build model
@@ -224,17 +324,21 @@ class Neural_Network:
         SR_target = self.SR
         Rf = self.RF
 
-        # Calculate Log returns, rolling volatility and threshold
+        # Calculate Log returns
         log_returns = np.log(self.df['z_score'] / self.df['z_score'].shift(1)).fillna(0)
-        rolling_vol = log_returns.rolling(window=N).std()
 
-        # Calculate future returns
-        future_return = log_returns.rolling(window=N).sum().shift(-N)
-        future_vol = rolling_vol.shift(-N)  # Align volatility with future return period
+        # Calculate future return: sum of next N returns
+        future_return = log_returns.shift(-N).rolling(window=N).sum()
+
+        # Calculate future volatility: standard deviation over the next N periods
+        future_vol = log_returns.shift(-N).rolling(window=N).std()
+
+        # Avoid division by zero
+        safe_future_vol = future_vol.replace(0, np.nan)
 
         # Calculate expected Sharpe ratio for long and short trades
-        expected_sharpe_long = (future_return - Rf) / future_vol
-        expected_sharpe_short = (-future_return - Rf) / future_vol  # For short positions, return is negative
+        expected_sharpe_long = future_return / safe_future_vol
+        expected_sharpe_short = -future_return / safe_future_vol  # Short trades reverse the sign
 
         # Defining labeling strategy similar to original but using Sharpe comparison
         self.df['label'] = np.where(expected_sharpe_long > SR_target, 1,  # Trade: long when expected Sharpe > target

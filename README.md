@@ -68,12 +68,12 @@ Purged K-Fold Cross-Validation to eliminate look-ahead bias
 Dynamic stop-loss and take-profit: Adaptive risk controls based on z-score movements
 
 ## Tech Stack
-Component	Technology <br />
-Language	Python 3.8+ <br />
-ML/Data	scikit-learn, XGBoost, TensorFlow <br />
-Analysis	pandas, NumPy, scipy <br />
-Visualization	matplotlib, seaborn <br />
-Research Frameworks	Hudson & Thames, Marcos López de Prado <br />
+**Component:**	Technology <br />
+**Language:**	Python 3.8+ <br />
+**ML/Data:**	scikit-learn, XGBoost, TensorFlow <br />
+**Analysis:**	pandas, NumPy, scipy <br />
+**Visualization:**	matplotlib, seaborn <br />
+**Research Frameworks:**	Hudson & Thames, Marcos López de Prado <br />
 
 ## Project Structure
 ```bash
@@ -101,13 +101,15 @@ rolling_window = 30
 
 # Labelling.py, Feature_Importance.py, ML-Models.py - Target labelling
 self.period = 10    # Labelling period <br />
-self.SR = 0.02      # Sharpe ratio threshold <br />  
+self.SR = 0.02      # Sharpe ratio threshold 
 self.RF = 0.01      # Risk-free rate
 
 # Backtest.py - Risk management
 z_score_volatility = 2.0    # Kelly criterion volatility threshold <br />
 weight_kelly = 0.5          # Kelly position weight multiplier <br />
+
 Advanced Customization <br />
+
 Switch clustering method (DBSCAN/OPTICS) in PairSelection.py
 
 Modify stop-loss / take-profit based on cumulative return or z-score in Backtest.py

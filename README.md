@@ -130,6 +130,12 @@ Real-time deployment and risk monitoring
 
 ![EDA Example](EDA/ABN_NA_Equity_BPSO_IM_Equity_EDA.png)
 
-## Example Pair Results
+## Pair Plot
 
-![DNB - FH](Results/DNB NO Equity_NDA FH Equity_tearsheet.png)
+![Pair Plot](tsne_visualization.png)
+
+## Feature Importance
+
+![Feature Importance](ACA_FP_Equity_BBVA_SQ_Equity_feature_importance.png)
+
+![Feature Pair Plot](ACA_FP_Equity_BBVA_SQ_Equity_pairplot.png)
